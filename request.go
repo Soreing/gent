@@ -194,8 +194,8 @@ func (r *Request) fmtEndpoint(
 	return wrt.buf.build(nil), nil
 }
 
-func (r *Request) GetMethod() []byte {
-	return r.data
+func (r *Request) GetMethod() string {
+	return r.method
 }
 
 func (r *Request) GetHeader(k string) (v string, ok bool) {
