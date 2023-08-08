@@ -11,15 +11,27 @@ import (
 )
 
 type retrier struct {
-	retr *sr.Retrier
+	retr       *sr.Retrier
+	retryCodes []int
 }
 
-func NewRetrier(
+func NewBasicRetrier(
 	max int,
 	delayf func(int) time.Duration,
 ) *retrier {
 	return &retrier{
 		retr: sr.NewRetrier(max, delayf),
+	}
+}
+
+func NewStatusCodeRetrier(
+	max int,
+	delayf func(int) time.Duration,
+	retryCodes []int,
+) *retrier {
+	return &retrier{
+		retr:       sr.NewRetrier(max, delayf),
+		retryCodes: retryCodes,
 	}
 }
 
@@ -29,6 +41,7 @@ func (r *retrier) Run(
 ) error {
 	return r.retr.RunCtx(ctx, work)
 }
+
 func (r *retrier) ShouldRetry(
 	res *http.Response,
 	err error,
@@ -36,10 +49,18 @@ func (r *retrier) ShouldRetry(
 	if err != nil {
 		return err, true
 	} else if res.StatusCode > 299 {
-		return fmt.Errorf(
+		e := fmt.Errorf(
 			"request failed with status code " +
 				strconv.Itoa(res.StatusCode),
-		), true
+		)
+
+		for _, code := range r.retryCodes {
+			if res.StatusCode == code {
+				return e, true
+			}
+		}
+
+		return e, false
 	} else {
 		return nil, false
 	}
