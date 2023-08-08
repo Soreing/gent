@@ -1,8 +1,2 @@
-github.com/BetaLixT/go-resiliency v1.2.0 h1:gu+rqbyypegqWpyPuF7lY3baCDcWMuCH1tLFn6OKAFY=
-github.com/BetaLixT/go-resiliency v1.2.0/go.mod h1:KTN2h0z+hsLUWVumt9Zr1UYHjehciivTLaoIHRYAIvI=
-github.com/BetaLixT/gottp v0.4.1 h1:8bkKLcSQq1ASWrnwY1QU+aDvjCapvut9hXKZ90C5CPo=
-github.com/BetaLixT/gottp v0.4.1/go.mod h1:xNExM2ZhUjnCGlabr/GdRytZdz433jzDwbfFj8EdtaA=
-github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8HmY=
-github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
-github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=
-github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
+github.com/Soreing/retrier v1.2.1 h1:EHdDRSztyJnYgR/d6QPpdpptevngC5FX3fpQmNfgMjk=
+github.com/Soreing/retrier v1.2.1/go.mod h1:UhFOJnODGy6y/e5tBasoyge1+gsU4qFTnrduB7Q5F+Q=
