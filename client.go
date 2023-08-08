@@ -29,7 +29,12 @@ func NewClient(opts ...Option) *Client {
 	functs = append(functs, cfg.hlmiddlewares...)
 	functs = append(functs, prepare)
 	functs = append(functs, cfg.llmiddlewares...)
-	functs = append(functs, execute)
+
+	if cfg.retrier != nil {
+		functs = append(functs, executeWithRetrier)
+	} else {
+		functs = append(functs, execute)
+	}
 
 	cl := &Client{
 		mem:       cfg.mempool,

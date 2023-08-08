@@ -117,7 +117,8 @@ func prepare(ctx context.Context, r *Request) {
 // execute creates an HTTP request from the method, url endpoint and content,
 // adds the headers to the request and uses the client to do the request.
 func execute(ctx context.Context, r *Request) {
-	req, err := http.NewRequest(
+	req, err := http.NewRequestWithContext(
+		ctx,
 		r.method,
 		string(r.endpoint),
 		bytes.NewReader(r.data),
@@ -135,6 +136,34 @@ func execute(ctx context.Context, r *Request) {
 	if err != nil {
 		r.Error(err)
 		return
+	}
+}
+
+// executeWithRetrier executes the request in the context of a retrier. The
+// request will be retried until the retrier's ShouldRetry function returns
+// false.
+func executeWithRetrier(ctx context.Context, r *Request) {
+	err := r.retr.Run(ctx, func(ctx context.Context) (error, bool) {
+		req, err := http.NewRequestWithContext(
+			ctx,
+			r.method,
+			string(r.endpoint),
+			bytes.NewReader(r.data),
+		)
+		if err != nil {
+			return err, false
+		}
+
+		for k, v := range r.headers {
+			req.Header.Add(k, v)
+		}
+
+		r.response, err = r.client.Do(req)
+		return r.retr.ShouldRetry(r.response, err)
+	})
+
+	if err != nil {
+		r.Error(err)
 	}
 }
 

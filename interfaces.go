@@ -20,6 +20,6 @@ type MemoryPool interface {
 
 // Retrier defines a wrapper that can retry a request
 type Retrier interface {
-	RunCtx(context.Context, func(ctx context.Context) error) error
-	Evaluate(http.Response, error) error
+	Run(context.Context, func(ctx context.Context) (error, bool)) error
+	ShouldRetry(*http.Response, error) (error, bool)
 }
