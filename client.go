@@ -48,7 +48,7 @@ func (c *Client) Get(
 	ctx context.Context,
 	endpoint string,
 	body any,
-	marshaller Marshaler,
+	marshaler Marshaler,
 	headers map[string]string,
 	queryParam map[string][]string,
 	pathParams ...string,
@@ -63,7 +63,7 @@ func (c *Client) Get(
 
 	req := newRequest(
 		ctx, c.mem, c.retr, cl, endpoint, "GET",
-		body, marshaller, headers,
+		body, marshaler, headers,
 		queryParam, pathParams,
 		c.functions,
 	)
@@ -83,7 +83,7 @@ func (c *Client) Post(
 	ctx context.Context,
 	endpoint string,
 	body any,
-	marshaller Marshaler,
+	marshaler Marshaler,
 	headers map[string]string,
 	queryParam map[string][]string,
 	pathParams ...string,
@@ -98,7 +98,7 @@ func (c *Client) Post(
 
 	req := newRequest(
 		ctx, c.mem, c.retr, cl, endpoint, "POST",
-		body, marshaller, headers,
+		body, marshaler, headers,
 		queryParam, pathParams,
 		c.functions,
 	)
