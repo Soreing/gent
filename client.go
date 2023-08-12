@@ -5,9 +5,6 @@ import (
 	"net/http"
 )
 
-const page_size = 256
-const pool_size = 100
-
 // Client wraps an http.Client with additional functionality.
 type Client struct {
 	mem       MemoryPool
