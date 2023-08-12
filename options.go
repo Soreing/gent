@@ -60,7 +60,7 @@ func UseHttpClientConstructor(constr func() HttpClient) Option {
 }
 
 // UseRetrier creates an option for adding a retrier that retries the request
-// untill it succeeds.
+// until it succeeds.
 func UseRetrier(retr Retrier) Option {
 	return &retrierOption{
 		retr: retr,
