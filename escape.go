@@ -13,7 +13,7 @@ const urlEscapeCharset = "" +
 
 // escape returns the escaped string sequence for a given byte.
 func escape(b byte) string {
-	return urlEscapeCharset[b<<2 : b<<2+3]
+	return urlEscapeCharset[int(b)<<2 : int(b)<<2+3]
 }
 
 // TODO: Comment
