@@ -437,20 +437,20 @@ func TestPrepareRequest(t *testing.T) {
 					string(req.data),
 				)
 			}
-			// hdr, ok := req.headers["Content-Type"]
-			// if ok != test.CTHeaderOk {
-			// 	t.Errorf(
-			// 		"expected content type header state to be %t, but it's %t",
-			// 		test.CTHeaderOk,
-			// 		ok,
-			// 	)
-			// } else if test.CTHeaderOk && hdr != test.CTHeader {
-			// 	t.Errorf(
-			// 		"expected content type header to be %s, but it's %s",
-			// 		test.CTHeader,
-			// 		hdr,
-			// 	)
-			// }
+			hdr, ok := req.headers["Content-Type"]
+			if ok != test.CTHeaderOk {
+				t.Errorf(
+					"expected content type header state to be %t, but it's %t",
+					test.CTHeaderOk,
+					ok,
+				)
+			} else if test.CTHeaderOk && hdr != test.CTHeader {
+				t.Errorf(
+					"expected content type header to be %s, but it's %s",
+					test.CTHeader,
+					hdr,
+				)
+			}
 		})
 	}
 }
