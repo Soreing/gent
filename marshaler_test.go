@@ -1,6 +1,7 @@
 package gent
 
 import (
+	"fmt"
 	"net/url"
 	"testing"
 )
@@ -174,6 +175,13 @@ func TestFormMarshaler(t *testing.T) {
 			Type:  "application/x-www-form-urlencoded",
 			Error: nil,
 		},
+		{
+			Name:  "invalid type",
+			Input: "invalid type",
+			Data:  nil,
+			Type:  "application/x-www-form-urlencoded",
+			Error: fmt.Errorf("invalid body type"),
+		},
 	}
 
 	for _, test := range tests {
@@ -182,8 +190,12 @@ func TestFormMarshaler(t *testing.T) {
 
 			dat, ct, err := msh.Marshal(test.Input)
 
-			if err != test.Error {
-				t.Errorf("expected err to be %v but it's %v", test.Error, err)
+			if test.Error != nil && err == nil {
+				t.Errorf("expected err to not be nil")
+			} else if test.Error == nil && err != nil {
+				t.Errorf("expected err to be nil")
+			} else if test.Error != nil && err.Error() != test.Error.Error() {
+				t.Errorf("expected err to be %s but it's %s", test.Error.Error(), err.Error())
 			}
 			if test.Data != nil && dat == nil {
 				t.Errorf("expected data to not be nil")

@@ -108,6 +108,37 @@ func TestHttpClientConstructorOption(t *testing.T) {
 	}
 }
 
+// TestRetrierOption tests if the retrier option can be created and that it
+// applies the configuration correctly
+func TestRetrierOption(t *testing.T) {
+	tests := []struct {
+		Name string
+	}{
+		{Name: "Use retrier constructor"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			retr := &mockRetrier{}
+			opt := UseRetrier(retr)
+
+			cfg := newConfiguration([]Option{opt})
+
+			if cfg.retrier == nil {
+				t.Errorf("expected cfg.retrier to not be nil")
+			} else {
+				if _, ok := cfg.retrier.(*mockRetrier); !ok {
+					t.Errorf(
+						"expected cfg.retrier to be of type %T but it's %T",
+						retr,
+						cfg.retrier,
+					)
+				}
+			}
+		})
+	}
+}
+
 // TestLowLevelMiddlewareOption tests that low level middleware options can be
 // created and that they apply the configuration accurately.
 func TestLowLevelMiddlewareOption(t *testing.T) {

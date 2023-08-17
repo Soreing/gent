@@ -19,6 +19,16 @@ func TestEscape(t *testing.T) {
 			In:   '\n',
 			Out:  "%0A",
 		},
+		{
+			Name: "Escape first",
+			In:   '\u0000',
+			Out:  "%00",
+		},
+		{
+			Name: "Escape last",
+			In:   '\u007f',
+			Out:  "%7F",
+		},
 	}
 
 	for _, test := range tests {
