@@ -84,7 +84,7 @@ func (r *Request) Errors() []error {
 }
 
 // prepare formats the endpoint of the request and marshals the request body if
-// there is a body and a marshaller module provided.
+// there is a body and a marshaler module provided.
 func prepare(ctx context.Context, r *Request) {
 	var err error
 
@@ -100,13 +100,17 @@ func prepare(ctx context.Context, r *Request) {
 
 	if r.body != nil {
 		if r.marshaler != nil {
-			r.data, r.headers["Content-Type"], err = r.marshaler.Marshal(r.body)
+			var ctype string
+			r.data, ctype, err = r.marshaler.Marshal(r.body)
 			if err != nil {
 				r.Error(err)
 				return
 			}
+			if _, ok := r.headers["Content-Type"]; !ok {
+				r.headers["Content-Type"] = ctype
+			}
 		} else {
-			r.Error(fmt.Errorf("marshaller is nil"))
+			r.Error(fmt.Errorf("marshaler is nil"))
 			return
 		}
 	}

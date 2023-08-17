@@ -5,9 +5,6 @@ import (
 	"net/http"
 )
 
-const page_size = 256
-const pool_size = 100
-
 // Client wraps an http.Client with additional functionality.
 type Client struct {
 	mem       MemoryPool
@@ -51,7 +48,7 @@ func (c *Client) Get(
 	ctx context.Context,
 	endpoint string,
 	body any,
-	marshaller Marshaler,
+	marshaler Marshaler,
 	headers map[string]string,
 	queryParam map[string][]string,
 	pathParams ...string,
@@ -66,7 +63,7 @@ func (c *Client) Get(
 
 	req := newRequest(
 		ctx, c.mem, c.retr, cl, endpoint, "GET",
-		body, marshaller, headers,
+		body, marshaler, headers,
 		queryParam, pathParams,
 		c.functions,
 	)
@@ -86,7 +83,7 @@ func (c *Client) Post(
 	ctx context.Context,
 	endpoint string,
 	body any,
-	marshaller Marshaler,
+	marshaler Marshaler,
 	headers map[string]string,
 	queryParam map[string][]string,
 	pathParams ...string,
@@ -101,7 +98,77 @@ func (c *Client) Post(
 
 	req := newRequest(
 		ctx, c.mem, c.retr, cl, endpoint, "POST",
-		body, marshaller, headers,
+		body, marshaler, headers,
+		queryParam, pathParams,
+		c.functions,
+	)
+
+	req.Next()
+
+	res = req.GetResponse()
+	errs := req.Errors()
+	if len(errs) > 0 {
+		return res, errs[0]
+	} else {
+		return res, nil
+	}
+}
+
+func (c *Client) Patch(
+	ctx context.Context,
+	endpoint string,
+	body any,
+	marshaler Marshaler,
+	headers map[string]string,
+	queryParam map[string][]string,
+	pathParams ...string,
+) (res *http.Response, err error) {
+
+	var cl HttpClient
+	if c.constr != nil {
+		cl = c.constr()
+	} else {
+		cl = c.client
+	}
+
+	req := newRequest(
+		ctx, c.mem, c.retr, cl, endpoint, "PATCH",
+		body, marshaler, headers,
+		queryParam, pathParams,
+		c.functions,
+	)
+
+	req.Next()
+
+	res = req.GetResponse()
+	errs := req.Errors()
+	if len(errs) > 0 {
+		return res, errs[0]
+	} else {
+		return res, nil
+	}
+}
+
+func (c *Client) Delete(
+	ctx context.Context,
+	endpoint string,
+	body any,
+	marshaler Marshaler,
+	headers map[string]string,
+	queryParam map[string][]string,
+	pathParams ...string,
+) (res *http.Response, err error) {
+
+	var cl HttpClient
+	if c.constr != nil {
+		cl = c.constr()
+	} else {
+		cl = c.client
+	}
+
+	req := newRequest(
+		ctx, c.mem, c.retr, cl, endpoint, "DELETE",
+		body, marshaler, headers,
 		queryParam, pathParams,
 		c.functions,
 	)
