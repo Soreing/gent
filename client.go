@@ -113,3 +113,73 @@ func (c *Client) Post(
 		return res, nil
 	}
 }
+
+func (c *Client) Patch(
+	ctx context.Context,
+	endpoint string,
+	body any,
+	marshaler Marshaler,
+	headers map[string]string,
+	queryParam map[string][]string,
+	pathParams ...string,
+) (res *http.Response, err error) {
+
+	var cl HttpClient
+	if c.constr != nil {
+		cl = c.constr()
+	} else {
+		cl = c.client
+	}
+
+	req := newRequest(
+		ctx, c.mem, c.retr, cl, endpoint, "PATCH",
+		body, marshaler, headers,
+		queryParam, pathParams,
+		c.functions,
+	)
+
+	req.Next()
+
+	res = req.GetResponse()
+	errs := req.Errors()
+	if len(errs) > 0 {
+		return res, errs[0]
+	} else {
+		return res, nil
+	}
+}
+
+func (c *Client) Delete(
+	ctx context.Context,
+	endpoint string,
+	body any,
+	marshaler Marshaler,
+	headers map[string]string,
+	queryParam map[string][]string,
+	pathParams ...string,
+) (res *http.Response, err error) {
+
+	var cl HttpClient
+	if c.constr != nil {
+		cl = c.constr()
+	} else {
+		cl = c.client
+	}
+
+	req := newRequest(
+		ctx, c.mem, c.retr, cl, endpoint, "DELETE",
+		body, marshaler, headers,
+		queryParam, pathParams,
+		c.functions,
+	)
+
+	req.Next()
+
+	res = req.GetResponse()
+	errs := req.Errors()
+	if len(errs) > 0 {
+		return res, errs[0]
+	} else {
+		return res, nil
+	}
+}
