@@ -36,10 +36,14 @@ func NewStatusCodeRetrier(
 	delayf func(int) time.Duration,
 	retryCodes []int,
 ) *retrier {
-	return &retrier{
-		retr:       sr.NewRetrier(max, delayf),
-		retryCodes: retryCodes,
+	rt := &retrier{
+		retr: sr.NewRetrier(max, delayf),
 	}
+	if retryCodes != nil {
+		rt.retryCodes = make([]int, len(retryCodes))
+		copy(rt.retryCodes, retryCodes)
+	}
+	return rt
 }
 
 // Run executes the task in the context of the retrier.

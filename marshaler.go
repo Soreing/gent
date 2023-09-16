@@ -54,10 +54,12 @@ func NewFormMarshaler() Marshaler {
 // Marshal returns an object encoded into a byte array and its content type.
 func (m *formMarshaler) Marshal(v any) (dat []byte, t string, err error) {
 	t = "application/x-www-form-urlencoded"
-	if fields, ok := v.(url.Values); !ok {
-		err = fmt.Errorf("invalid body type")
+	if vls, ok := v.(url.Values); ok {
+		dat = []byte(vls.Encode())
+	} else if mp, ok := v.(map[string][]string); ok {
+		dat = []byte(url.Values(mp).Encode())
 	} else {
-		dat = []byte(fields.Encode())
+		err = fmt.Errorf("invalid body type")
 	}
 	return
 }

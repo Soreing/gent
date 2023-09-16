@@ -257,6 +257,6 @@ func (r *Request) AddHeader(k, v string) {
 	r.headers[k] = v
 }
 
-func (r *Request) DelHeader(k string) {
+func (r *Request) RemoveHeader(k string) {
 	delete(r.headers, k)
 }

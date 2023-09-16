@@ -1,5 +1,10 @@
 # Go HTTP Client
 
+![Build](https://github.com/soreing/gent/actions/workflows/build_status.yaml/badge.svg)
+![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/Soreing/4b6f950f01f3e6e5b9ed17b268664538/raw/gent)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Soreing/gent)](https://goreportcard.com/report/github.com/Soreing/gent)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Soreing/gent.svg)](https://pkg.go.dev/github.com/Soreing/gent)
+
 Gent is a Golang HTTP Client wrapper that provides additional features for flexibility and increased performance.
 
 ## Usage
