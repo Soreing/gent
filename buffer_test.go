@@ -7,7 +7,7 @@ import (
 )
 
 // TestCreateBuffer tests that when the buffer is created, the current page
-// should be set as the parameter that was provided in teh constructor
+// should be set as the parameter that was provided in the constructor
 func TestCreateBuffer(t *testing.T) {
 	tests := []struct {
 		Name string
