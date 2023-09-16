@@ -2,6 +2,8 @@ package gent
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCreateBuffer tests that when the buffer is created, the current page
@@ -24,35 +26,14 @@ func TestCreateBuffer(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			buf := newBuffer(test.Page)
-			if buf.page == nil {
-				t.Errorf("expected buf.page to not be nil")
-			} else {
-				if len(buf.page) != len(test.Page) {
-					t.Errorf(
-						"expected len(buf.page) to be %d but it's %d",
-						len(test.Page),
-						len(buf.page),
-					)
-				}
-				if cap(buf.page) != cap(test.Page) {
-					t.Errorf(
-						"expected cap(buf.page) to be %d but it's %d",
-						len(test.Page),
-						len(buf.page),
-					)
-				}
-				for i := range test.Page {
-					if test.Page[i] != buf.page[i] {
-						t.Errorf("expected the contents of buf.page to match page")
-					}
-				}
+
+			if assert.NotNil(t, buf.page) {
+				assert.Equal(t, len(test.Page), len(buf.page))
+				assert.Equal(t, cap(test.Page), cap(buf.page))
+				assert.Equal(t, test.Page, buf.page)
 			}
-			if buf.store != nil {
-				t.Errorf("expected buf.store to be nil")
-			}
-			if buf.bytes != 0 {
-				t.Errorf("expected buf.bytes to be %d, but it's %d", 0, buf.bytes)
-			}
+			assert.Nil(t, buf.store)
+			assert.Equal(t, 0, buf.bytes)
 		})
 	}
 }
@@ -91,43 +72,14 @@ func TestAddToBuffer(t *testing.T) {
 			for i, pg := range test.Pages {
 				buf.add(pg)
 
-				if buf.page == nil {
-					t.Errorf("expected buf.page to not be nil")
-				} else {
-					if len(buf.page) != len(pg) {
-						t.Errorf(
-							"expected len(buf.page) to be %d but it's %d",
-							len(pg),
-							len(buf.page),
-						)
-					}
-					if cap(buf.page) != cap(pg) {
-						t.Errorf(
-							"expected cap(buf.page) to be %d but it's %d",
-							len(pg),
-							len(buf.page),
-						)
-					}
-					for i := range pg {
-						if pg[i] != buf.page[i] {
-							t.Errorf("expected the contents of buf.page to match pg")
-						}
-					}
+				if assert.NotNil(t, buf.page) {
+					assert.Equal(t, len(pg), len(buf.page))
+					assert.Equal(t, cap(pg), cap(buf.page))
+					assert.Equal(t, pg, buf.page)
 				}
-
-				if buf.store == nil {
-					t.Errorf("expected buf.store to not be nil")
-				} else if len(buf.store) != i+1 {
-					t.Errorf(
-						"expected len(buf.store) to be %d but it's %d",
-						i+1,
-						len(buf.store),
-					)
-				}
-
-				if buf.bytes != bytes {
-					t.Errorf("expected buf.bytes to be %d, but it's %d", bytes, buf.bytes)
-				}
+				assert.NotNil(t, buf.store)
+				assert.Equal(t, i+1, len(buf.store))
+				assert.Equal(t, bytes, buf.bytes)
 
 				bytes += len(pg)
 			}
@@ -162,9 +114,7 @@ func TestBufferLength(t *testing.T) {
 				buf.add(pg)
 				bytes += len(pg)
 
-				if buf.len() != bytes {
-					t.Errorf("expected buf.len() to be %d, but it's %d", bytes, buf.len())
-				}
+				assert.Equal(t, bytes, buf.len())
 			}
 		})
 	}
@@ -181,7 +131,7 @@ func TestBuildBuffer(t *testing.T) {
 		{
 			Name:   "Empty byte array",
 			Pages:  [][]byte{make([]byte, 0, 256)},
-			Result: []byte(""),
+			Result: []byte(nil),
 		},
 		{
 			Name:   "One byte array",
@@ -214,11 +164,9 @@ func TestBuildBuffer(t *testing.T) {
 			}
 
 			res := buf.build(nil)
-			if len(res) != bytes {
-				t.Errorf("expected len(res) to be %d, but it's %d", bytes, len(res))
-			} else if string(res) != string(test.Result) {
-				t.Errorf("expected res to be %s, but it's %s", string(test.Result), string(res))
-			}
+
+			assert.Equal(t, bytes, len(res))
+			assert.Equal(t, test.Result, res)
 		})
 	}
 }
@@ -236,7 +184,7 @@ func TestBuildExistingBuffer(t *testing.T) {
 			Name:   "No buffer provided",
 			Slice:  nil,
 			Pages:  [][]byte{make([]byte, 0, 256)},
-			Result: []byte(""),
+			Result: []byte(nil),
 		},
 		{
 			Name:   "Buffer has sufficient size",
@@ -268,13 +216,12 @@ func TestBuildExistingBuffer(t *testing.T) {
 			}
 
 			res := buf.build(test.Slice)
-			if string(res) != string(test.Result) {
-				t.Errorf("expected res to be %s, but it's %s", string(test.Result), string(res))
-			}
-			if len(res) >= cap(test.Slice) && cap(res) != len(res) {
-				t.Errorf("expected cap(res) to be %d, but it's %d", len(res), cap(res))
-			} else if len(res) < cap(test.Slice) && cap(res) != cap(test.Slice) {
-				t.Errorf("expected cap(res) to be %d, but it's %d", cap(test.Slice), cap(res))
+
+			assert.Equal(t, test.Result, res)
+			if len(res) >= cap(test.Slice) {
+				assert.Equal(t, len(res), cap(res))
+			} else {
+				assert.Equal(t, cap(test.Slice), cap(res))
 			}
 		})
 	}

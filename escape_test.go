@@ -1,6 +1,10 @@
 package gent
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 // TestEscape tests the result of escaping bytes
 func TestEscape(t *testing.T) {
@@ -34,14 +38,7 @@ func TestEscape(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			seq := escape(test.In)
-
-			if seq != test.Out {
-				t.Errorf(
-					"expected seq to be %s but it's %s",
-					test.Out,
-					seq,
-				)
-			}
+			assert.Equal(t, test.Out, seq)
 		})
 	}
 }
@@ -113,14 +110,7 @@ func TestShouldEscape(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			esc := shouldEscape(test.In)
-
-			if esc != test.Out {
-				t.Errorf(
-					"expected esc to be %t but it's %t",
-					test.Out,
-					esc,
-				)
-			}
+			assert.Equal(t, test.Out, esc)
 		})
 	}
 }

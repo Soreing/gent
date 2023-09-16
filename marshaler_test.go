@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestJsonMarshaler tests that the json marshaler can convert objects into
@@ -59,17 +61,9 @@ func TestJsonMarshaler(t *testing.T) {
 
 			dat, ct, err := msh.Marshal(test.Input)
 
-			if err != test.Error {
-				t.Errorf("expected err to be %v but it's %v", test.Error, err)
-			}
-			if test.Data != nil && dat == nil {
-				t.Errorf("expected data to not be nil")
-			} else if string(dat) != string(test.Data) {
-				t.Errorf("expected data to be %s but it's %s", string(test.Data), string(dat))
-			}
-			if ct != test.Type {
-				t.Errorf("expected type to be %s but it's %s", string(test.Type), string(ct))
-			}
+			assert.Equal(t, test.Error, err)
+			assert.Equal(t, test.Data, dat)
+			assert.Equal(t, test.Type, ct)
 		})
 	}
 }
@@ -133,17 +127,9 @@ func TestXmlMarshaler(t *testing.T) {
 
 			dat, ct, err := msh.Marshal(test.Input)
 
-			if err != test.Error {
-				t.Errorf("expected err to be %v but it's %v", test.Error, err)
-			}
-			if test.Data != nil && dat == nil {
-				t.Errorf("expected data to not be nil")
-			} else if string(dat) != string(test.Data) {
-				t.Errorf("expected data to be %s but it's %s", string(test.Data), string(dat))
-			}
-			if ct != test.Type {
-				t.Errorf("expected type to be %s but it's %s", string(test.Type), string(ct))
-			}
+			assert.Equal(t, test.Error, err)
+			assert.Equal(t, test.Data, dat)
+			assert.Equal(t, test.Type, ct)
 		})
 	}
 }
@@ -176,6 +162,16 @@ func TestFormMarshaler(t *testing.T) {
 			Error: nil,
 		},
 		{
+			Name: "Populated map",
+			Input: map[string][]string{
+				"id":   {"123"},
+				"name": {"John Smith"},
+			},
+			Data:  []byte(`id=123&name=John+Smith`),
+			Type:  "application/x-www-form-urlencoded",
+			Error: nil,
+		},
+		{
 			Name:  "invalid type",
 			Input: "invalid type",
 			Data:  nil,
@@ -190,21 +186,9 @@ func TestFormMarshaler(t *testing.T) {
 
 			dat, ct, err := msh.Marshal(test.Input)
 
-			if test.Error != nil && err == nil {
-				t.Errorf("expected err to not be nil")
-			} else if test.Error == nil && err != nil {
-				t.Errorf("expected err to be nil")
-			} else if test.Error != nil && err.Error() != test.Error.Error() {
-				t.Errorf("expected err to be %s but it's %s", test.Error.Error(), err.Error())
-			}
-			if test.Data != nil && dat == nil {
-				t.Errorf("expected data to not be nil")
-			} else if string(dat) != string(test.Data) {
-				t.Errorf("expected data to be %s but it's %s", string(test.Data), string(dat))
-			}
-			if ct != test.Type {
-				t.Errorf("expected type to be %s but it's %s", string(test.Type), string(ct))
-			}
+			assert.Equal(t, test.Error, err)
+			assert.Equal(t, test.Data, dat)
+			assert.Equal(t, test.Type, ct)
 		})
 	}
 }

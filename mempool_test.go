@@ -1,6 +1,10 @@
 package gent
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 // TestCreateDefaultMempool tests that mempools can be created with default options
 func TestCreateDefaultMempool(t *testing.T) {
@@ -14,33 +18,12 @@ func TestCreateDefaultMempool(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-
 			mempool := NewDefaultMemPool()
 
-			if mempool == nil {
-				t.Errorf("expected mempool to not be nil")
-			} else {
-				if mempool.pageSize != default_page_size {
-					t.Errorf(
-						"expected mempool.pageSize to be %d but it's %d",
-						default_page_size,
-						mempool.pageSize,
-					)
-				}
-				if len(mempool.pool) != 0 {
-					t.Errorf(
-						"expected len(mempool.pool) to be %d but it's %d",
-						0,
-						len(mempool.pool),
-					)
-				}
-				if cap(mempool.pool) != default_pool_size {
-					t.Errorf(
-						"expected cap(mempool.pool) to be %d but it's %d",
-						default_pool_size,
-						cap(mempool.pool),
-					)
-				}
+			if assert.NotNil(t, mempool) {
+				assert.Equal(t, default_page_size, mempool.pageSize)
+				assert.Equal(t, 0, len(mempool.pool))
+				assert.Equal(t, default_pool_size, cap(mempool.pool))
 			}
 		})
 	}
@@ -62,33 +45,12 @@ func TestCreateMempool(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-
 			mempool := NewMemPool(test.PageSize, test.PoolSize)
 
-			if mempool == nil {
-				t.Errorf("expected mempool to not be nil")
-			} else {
-				if mempool.pageSize != test.PageSize {
-					t.Errorf(
-						"expected mempool.pageSize to be %d but it's %d",
-						test.PageSize,
-						mempool.pageSize,
-					)
-				}
-				if len(mempool.pool) != 0 {
-					t.Errorf(
-						"expected len(mempool.pool) to be %d but it's %d",
-						0,
-						len(mempool.pool),
-					)
-				}
-				if cap(mempool.pool) != test.PoolSize {
-					t.Errorf(
-						"expected cap(mempool.pool) to be %d but it's %d",
-						test.PoolSize,
-						cap(mempool.pool),
-					)
-				}
+			if assert.NotNil(t, mempool) {
+				assert.Equal(t, test.PageSize, mempool.pageSize)
+				assert.Equal(t, 0, len(mempool.pool))
+				assert.Equal(t, test.PoolSize, cap(mempool.pool))
 			}
 		})
 	}
@@ -132,7 +94,6 @@ func TestAcquireMemory(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-
 			mempool := NewMemPool(test.PageSize, test.PoolSize)
 			for i := 0; i < test.PagesBefore; i++ {
 				mempool.pool <- make([]byte, test.PageSize)
@@ -143,21 +104,9 @@ func TestAcquireMemory(t *testing.T) {
 				page = mempool.Acquire()
 			}
 
-			if page == nil {
-				t.Errorf("expected page to not be nil")
-			} else if cap(page) != test.PageSize {
-				t.Errorf(
-					"expected cap(page) to be %d but it's %d",
-					test.PageSize,
-					cap(page),
-				)
-			}
-			if len(mempool.pool) != test.PagesAfter {
-				t.Errorf(
-					"expected len(mempool.pool) to be %d but it's %d",
-					test.PagesAfter,
-					len(mempool.pool),
-				)
+			assert.Equal(t, test.PagesAfter, len(mempool.pool))
+			if assert.NotNil(t, page) {
+				assert.Equal(t, test.PageSize, cap(page))
 			}
 		})
 	}
@@ -201,7 +150,6 @@ func TestReleaseMemory(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-
 			mempool := NewMemPool(test.PageSize, test.PoolSize)
 			for i := 0; i < test.PagesBefore; i++ {
 				mempool.pool <- make([]byte, test.PageSize)
@@ -213,13 +161,8 @@ func TestReleaseMemory(t *testing.T) {
 			}
 			mempool.Release(pages...)
 
-			if len(mempool.pool) != test.PagesAfter {
-				t.Errorf(
-					"expected len(mempool.pool) to be %d but it's %d",
-					test.PagesAfter,
-					len(mempool.pool),
-				)
-			}
+			assert.NotNil(t, mempool.pool)
+			assert.Equal(t, test.PagesAfter, len(mempool.pool))
 		})
 	}
 }

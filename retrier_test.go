@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // TestCreatingBasicRetrier tests the creation of a basic retrier
@@ -28,12 +30,8 @@ func TestCreatingBasicRetrier(t *testing.T) {
 		t.Run(test.Name, func(t *testing.T) {
 			ret := NewBasicRetrier(test.Max, test.Delay)
 
-			if ret.retr == nil {
-				t.Errorf("expected ret.retr to not be nil")
-			}
-			if ret.retryCodes != nil {
-				t.Errorf("expected ret.retr to be nil")
-			}
+			assert.NotNil(t, ret.retr)
+			assert.Nil(t, ret.retryCodes)
 		})
 	}
 }
@@ -68,26 +66,8 @@ func TestCreatingStatusCodeRetrier(t *testing.T) {
 		t.Run(test.Name, func(t *testing.T) {
 			ret := NewStatusCodeRetrier(test.Max, test.Delay, test.Codes)
 
-			if ret.retr == nil {
-				t.Errorf("expected ret.retr to not be nil")
-			}
-			if test.Codes == nil && ret.retryCodes != nil {
-				t.Errorf("expected ret.retryCodes to be nil")
-			} else if test.Codes != nil && ret.retryCodes == nil {
-				t.Errorf("expected ret.retryCodes to not be nil")
-			} else if len(ret.retryCodes) != len(test.Codes) {
-				t.Errorf(
-					"expected len(ret.retryCodes) to be %d but it's %d",
-					len(test.Codes),
-					len(ret.retryCodes),
-				)
-			} else {
-				for i, c := range test.Codes {
-					if ret.retryCodes[i] != c {
-						t.Errorf("expected contents of ret.retryCodes to match input")
-					}
-				}
-			}
+			assert.NotNil(t, ret.retr)
+			assert.Equal(t, test.Codes, ret.retryCodes)
 		})
 	}
 }
@@ -102,9 +82,7 @@ func TestRunTask(t *testing.T) {
 		{
 			Name: "Running work function",
 			Work: func(ctx context.Context) (error, bool) {
-				val := ctx.Value("ch")
-				ch := val.(chan int)
-				ch <- 0
+				ctx.Value("ch").(chan int) <- 0
 				return nil, false
 			},
 			Error: nil,
@@ -117,23 +95,22 @@ func TestRunTask(t *testing.T) {
 				return time.Second
 			})
 
-			dlCtx, cncl := context.WithDeadline(
-				context.TODO(),
-				time.Now().Add(time.Second),
-			)
+			ch := make(chan int, 1)
+			dl := time.Now().Add(time.Second)
+			ctx := context.WithValue(context.TODO(), "ch", ch)
+			ctx, cncl := context.WithDeadline(ctx, dl)
 			defer cncl()
 
-			ch := make(chan int, 1)
-			ctx := context.WithValue(dlCtx, "ch", ch)
 			err := ret.Run(ctx, test.Work)
 
-			if err != test.Error {
-				t.Errorf("expected err to be %v but it's %v", test.Error, err)
-			} else {
+			assert.Equal(t, test.Error, err)
+
+			if test.Error == nil {
 				select {
-				case <-ch:
 				case <-ctx.Done():
 					t.Errorf("waiting for result timed out")
+				case n := <-ch:
+					assert.Equal(t, 0, n)
 				}
 			}
 		})
@@ -192,20 +169,8 @@ func TestShouldRetryTask(t *testing.T) {
 
 			err, retry := ret.ShouldRetry(test.Response, test.ErrorIn)
 
-			if test.ErrorOut != nil && err == nil {
-				t.Errorf("expected err to not be nil")
-			} else if test.ErrorOut == nil && err != nil {
-				t.Errorf("expected err to be nil")
-			} else if test.ErrorOut != nil && err.Error() != test.ErrorOut.Error() {
-				t.Errorf(
-					"expected err to be %s but it's %s",
-					test.ErrorOut.Error(),
-					err.Error(),
-				)
-			}
-			if retry != test.Retry {
-				t.Errorf("expected retry to be %t but it's %t", test.Retry, retry)
-			}
+			assert.Equal(t, test.ErrorOut, err)
+			assert.Equal(t, test.Retry, retry)
 		})
 	}
 }

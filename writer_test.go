@@ -1,6 +1,10 @@
 package gent
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 // TestNewWriter tests if a writer can be created and that the object's fields
 // are properly initialized
@@ -19,12 +23,8 @@ func TestNewWriter(t *testing.T) {
 		t.Run(test.Name, func(t *testing.T) {
 			wrt := newWrirter(test.MemPool)
 
-			if wrt.mem == nil {
-				t.Errorf("expected wrt.mem to not be nil")
-			}
-			if wrt.buf == nil {
-				t.Errorf("expected wrt.buf to not be nil")
-			}
+			assert.NotNil(t, wrt.mem)
+			assert.NotNil(t, wrt.buf)
 		})
 	}
 }
@@ -67,20 +67,8 @@ func TestWriteByte(t *testing.T) {
 			wrt.buf.page = append(wrt.buf.page, test.InitialData...)
 			wrt.writeByte('a')
 
-			if len(wrt.buf.store) != test.StoreLength {
-				t.Errorf(
-					"expected len(wrt.buf.store) to be %d but it's %d",
-					test.StoreLength,
-					len(wrt.buf.store),
-				)
-			}
-			if len(wrt.buf.page) != test.PageLength {
-				t.Errorf(
-					"expected len(wrt.buf.page) to be %d but it's %d",
-					test.PageLength,
-					len(wrt.buf.page),
-				)
-			}
+			assert.Equal(t, test.StoreLength, len(wrt.buf.store))
+			assert.Equal(t, test.PageLength, len(wrt.buf.page))
 		})
 	}
 }
@@ -135,20 +123,8 @@ func TestWriteString(t *testing.T) {
 			wrt.buf.page = append(wrt.buf.page, test.InitialData...)
 			wrt.writeString(test.String)
 
-			if len(wrt.buf.store) != test.StoreLength {
-				t.Errorf(
-					"expected len(wrt.buf.store) to be %d but it's %d",
-					test.StoreLength,
-					len(wrt.buf.store),
-				)
-			}
-			if len(wrt.buf.page) != test.PageLength {
-				t.Errorf(
-					"expected len(wrt.buf.page) to be %d but it's %d",
-					test.PageLength,
-					len(wrt.buf.page),
-				)
-			}
+			assert.Equal(t, test.StoreLength, len(wrt.buf.store))
+			assert.Equal(t, test.PageLength, len(wrt.buf.page))
 		})
 	}
 }
@@ -195,13 +171,7 @@ func TestWriteEscaped(t *testing.T) {
 
 			res := string(wrt.buf.build(nil))
 
-			if res != test.Result {
-				t.Errorf(
-					"expected result to be %s but it's %s",
-					test.Result,
-					res,
-				)
-			}
+			assert.Equal(t, test.Result, res)
 		})
 	}
 }
@@ -236,13 +206,7 @@ func TestReleaseWriter(t *testing.T) {
 			wrt.release()
 			mem := wrt.mem.(*MemPool)
 
-			if len(mem.pool) != test.Pages+1 {
-				t.Errorf(
-					"expected len(mem.pool) to be %d but it's %d",
-					test.Pages+1,
-					len(mem.pool),
-				)
-			}
+			assert.Equal(t, test.Pages+1, len(mem.pool))
 		})
 	}
 }

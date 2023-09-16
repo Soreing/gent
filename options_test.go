@@ -4,19 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
-
-type mockMemPool struct {
-	MemoryPool
-}
-
-type mockHttpClient struct {
-	HttpClient
-}
-
-type mockRetrier struct {
-	retrier
-}
 
 // TestMemoryPoolOption tests that memory pool options can be created and that
 // they apply the configuration accurately.
@@ -33,15 +23,8 @@ func TestMemoryPoolOption(t *testing.T) {
 			opt := UseMemoryPool(pool)
 			cfg := newConfiguration([]Option{opt})
 
-			if cfg.mempool == nil {
-				t.Errorf("expected cfg.mempool to not be nil")
-			} else if _, ok := cfg.mempool.(*mockMemPool); !ok {
-				t.Errorf(
-					"expected cfg.mempool to be of type %T but it's %T",
-					pool,
-					cfg.mempool,
-				)
-			}
+			assert.NotNil(t, cfg.mempool)
+			assert.Equal(t, cfg.mempool, pool)
 		})
 	}
 }
@@ -61,15 +44,8 @@ func TestHttpClientOption(t *testing.T) {
 			opt := UseHttpClient(client)
 			cfg := newConfiguration([]Option{opt})
 
-			if cfg.httpClient == nil {
-				t.Errorf("expected cfg.httpClient to not be nil")
-			} else if _, ok := cfg.httpClient.(*mockHttpClient); !ok {
-				t.Errorf(
-					"expected cfg.httpClient to be of type %T but it's %T",
-					client,
-					cfg.httpClient,
-				)
-			}
+			assert.NotNil(t, cfg.httpClient)
+			assert.Equal(t, cfg.httpClient, client)
 		})
 	}
 }
@@ -86,23 +62,12 @@ func TestHttpClientConstructorOption(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			client := &mockHttpClient{}
-			opt := UseHttpClientConstructor(func() HttpClient {
-				return client
-			})
-
+			opt := UseHttpClientConstructor(func() HttpClient { return client })
 			cfg := newConfiguration([]Option{opt})
 
-			if cfg.newClientFn == nil {
-				t.Errorf("expected cfg.httpClient to not be nil")
-			} else {
+			if assert.NotNil(t, cfg.newClientFn) {
 				newClient := cfg.newClientFn()
-				if _, ok := newClient.(*mockHttpClient); !ok {
-					t.Errorf(
-						"expected client to be of type %T but it's %T",
-						client,
-						newClient,
-					)
-				}
+				assert.Equal(t, client, newClient)
 			}
 		})
 	}
@@ -121,20 +86,10 @@ func TestRetrierOption(t *testing.T) {
 		t.Run(test.Name, func(t *testing.T) {
 			retr := &mockRetrier{}
 			opt := UseRetrier(retr)
-
 			cfg := newConfiguration([]Option{opt})
 
-			if cfg.retrier == nil {
-				t.Errorf("expected cfg.retrier to not be nil")
-			} else {
-				if _, ok := cfg.retrier.(*mockRetrier); !ok {
-					t.Errorf(
-						"expected cfg.retrier to be of type %T but it's %T",
-						retr,
-						cfg.retrier,
-					)
-				}
-			}
+			assert.NotNil(t, cfg.retrier)
+			assert.Equal(t, retr, cfg.retrier)
 		})
 	}
 }
@@ -150,9 +105,7 @@ func TestLowLevelMiddlewareOption(t *testing.T) {
 			Name: "Use one low level middleware",
 			Middlewares: []func(context.Context, *Request){
 				func(c context.Context, r *Request) {
-					val := c.Value("ch")
-					ch := val.(chan int)
-					ch <- 0
+					c.Value("ch").(chan int) <- 0
 				},
 			},
 		},
@@ -160,14 +113,10 @@ func TestLowLevelMiddlewareOption(t *testing.T) {
 			Name: "Use multiple low level middlewares",
 			Middlewares: []func(context.Context, *Request){
 				func(c context.Context, r *Request) {
-					val := c.Value("ch")
-					ch := val.(chan int)
-					ch <- 0
+					c.Value("ch").(chan int) <- 0
 				},
 				func(c context.Context, r *Request) {
-					val := c.Value("ch")
-					ch := val.(chan int)
-					ch <- 1
+					c.Value("ch").(chan int) <- 1
 				},
 			},
 		},
@@ -182,41 +131,28 @@ func TestLowLevelMiddlewareOption(t *testing.T) {
 
 			cfg := newConfiguration(opts)
 
-			if cfg.llmiddlewares == nil {
-				t.Errorf("expected cfg.llmiddlewares to not be nil")
-			} else if len(cfg.llmiddlewares) != len(test.Middlewares) {
-				t.Errorf(
-					"expected len(cfg.llmiddlewares) to be of %d but it's %d",
-					len(test.Middlewares),
-					len(cfg.llmiddlewares),
-				)
-			} else {
-				dlCtx, cncl := context.WithDeadline(
-					context.TODO(),
-					time.Now().Add(time.Second),
-				)
-				defer cncl()
+			assert.NotNil(t, cfg.llmiddlewares)
+			assert.Equal(t, len(test.Middlewares), len(cfg.llmiddlewares))
 
-				ch := make(chan int, len(cfg.llmiddlewares))
-				ctx := context.WithValue(dlCtx, "ch", ch)
+			ch := make(chan int, 1)
+			dl := time.Now().Add(time.Second)
+			ctx := context.WithValue(context.TODO(), "ch", ch)
+			ctx, cncl := context.WithDeadline(ctx, dl)
+			defer cncl()
 
-				go func() {
-					for _, mdw := range cfg.llmiddlewares {
-						mdw(ctx, nil)
-					}
-				}()
-
-				for i := range cfg.llmiddlewares {
-					select {
-					case <-ctx.Done():
-						t.Errorf("waiting for middlewares timed out")
-					case n := <-ch:
-						if n != i {
-							t.Errorf("expected mdw value to be of %d but it's %d", i, n)
-						}
-					}
+			go func() {
+				for _, mdw := range cfg.llmiddlewares {
+					mdw(ctx, nil)
 				}
+			}()
 
+			for i := range cfg.llmiddlewares {
+				select {
+				case <-ctx.Done():
+					t.Errorf("waiting for middlewares timed out")
+				case n := <-ch:
+					assert.Equal(t, i, n)
+				}
 			}
 		})
 	}
@@ -233,9 +169,7 @@ func TestHighLevelMiddlewareOption(t *testing.T) {
 			Name: "Use one high level middleware",
 			Middlewares: []func(context.Context, *Request){
 				func(c context.Context, r *Request) {
-					val := c.Value("ch")
-					ch := val.(chan int)
-					ch <- 0
+					c.Value("ch").(chan int) <- 0
 				},
 			},
 		},
@@ -243,14 +177,10 @@ func TestHighLevelMiddlewareOption(t *testing.T) {
 			Name: "Use multiple high level middlewares",
 			Middlewares: []func(context.Context, *Request){
 				func(c context.Context, r *Request) {
-					val := c.Value("ch")
-					ch := val.(chan int)
-					ch <- 0
+					c.Value("ch").(chan int) <- 0
 				},
 				func(c context.Context, r *Request) {
-					val := c.Value("ch")
-					ch := val.(chan int)
-					ch <- 1
+					c.Value("ch").(chan int) <- 1
 				},
 			},
 		},
@@ -265,41 +195,28 @@ func TestHighLevelMiddlewareOption(t *testing.T) {
 
 			cfg := newConfiguration(opts)
 
-			if cfg.hlmiddlewares == nil {
-				t.Errorf("expected cfg.hlmiddlewares to not be nil")
-			} else if len(cfg.hlmiddlewares) != len(test.Middlewares) {
-				t.Errorf(
-					"expected len(cfg.hlmiddlewares) to be of %d but it's %d",
-					len(test.Middlewares),
-					len(cfg.hlmiddlewares),
-				)
-			} else {
-				dlCtx, cncl := context.WithDeadline(
-					context.TODO(),
-					time.Now().Add(time.Second),
-				)
-				defer cncl()
+			assert.NotNil(t, cfg.hlmiddlewares)
+			assert.Equal(t, len(test.Middlewares), len(cfg.hlmiddlewares))
 
-				ch := make(chan int, len(cfg.hlmiddlewares))
-				ctx := context.WithValue(dlCtx, "ch", ch)
+			ch := make(chan int, 1)
+			dl := time.Now().Add(time.Second)
+			ctx := context.WithValue(context.TODO(), "ch", ch)
+			ctx, cncl := context.WithDeadline(ctx, dl)
+			defer cncl()
 
-				go func() {
-					for _, mdw := range cfg.hlmiddlewares {
-						mdw(ctx, nil)
-					}
-				}()
-
-				for i := range cfg.hlmiddlewares {
-					select {
-					case <-ctx.Done():
-						t.Errorf("waiting for middlewares timed out")
-					case n := <-ch:
-						if n != i {
-							t.Errorf("expected mdw value to be of %d but it's %d", i, n)
-						}
-					}
+			go func() {
+				for _, mdw := range cfg.hlmiddlewares {
+					mdw(ctx, nil)
 				}
+			}()
 
+			for i := range cfg.hlmiddlewares {
+				select {
+				case <-ctx.Done():
+					t.Errorf("waiting for middlewares timed out")
+				case n := <-ch:
+					assert.Equal(t, i, n)
+				}
 			}
 		})
 	}
