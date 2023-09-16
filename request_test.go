@@ -691,3 +691,244 @@ func TestFormatEndpoint(t *testing.T) {
 		})
 	}
 }
+
+// TestGetMethod tests if request method can be fetched correctly
+func TestGetMethod(t *testing.T) {
+	tests := []struct {
+		Name   string
+		Method string
+	}{
+		{
+			Name:   "Get Method",
+			Method: "GET",
+		},
+		{
+			Name:   "Post Method",
+			Method: "POST",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := &Request{method: test.Method}
+			val := req.GetMethod()
+			assert.Equal(t, test.Method, val)
+		})
+	}
+}
+
+// TestGetHeader tests if request method can be fetched correctly
+func TestGetHeader(t *testing.T) {
+	tests := []struct {
+		Name    string
+		Headers map[string]string
+		Key     string
+		Value   string
+		Exists  bool
+	}{
+		{
+			Name: "Header exists",
+			Headers: map[string]string{
+				"Authorization": "Bearer x.y.z",
+				"Content-Type":  "application/json",
+			},
+			Key:    "Authorization",
+			Value:  "Bearer x.y.z",
+			Exists: true,
+		},
+		{
+			Name:    "Header does not exist",
+			Headers: map[string]string{},
+			Key:     "Authorization",
+			Value:   "",
+			Exists:  false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := &Request{headers: test.Headers}
+			val, ok := req.GetHeader(test.Key)
+			assert.Equal(t, test.Value, val)
+			assert.Equal(t, test.Exists, ok)
+		})
+	}
+}
+
+// TestGetQueryParam tests if request query parameters can be fetched correctly
+func TestGetQueryParam(t *testing.T) {
+	tests := []struct {
+		Name   string
+		Params map[string][]string
+		Key    string
+		Value  []string
+		Exists bool
+	}{
+		{
+			Name: "Param exists",
+			Params: map[string][]string{
+				"ids": {"123", "456", "789"},
+			},
+			Key:    "ids",
+			Value:  []string{"123", "456", "789"},
+			Exists: true,
+		},
+		{
+			Name:   "Param does not exist",
+			Params: map[string][]string{},
+			Key:    "ids",
+			Value:  nil,
+			Exists: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := &Request{queryParams: test.Params}
+			val, ok := req.GetQueryParam(test.Key)
+			assert.Equal(t, test.Value, val)
+			assert.Equal(t, test.Exists, ok)
+		})
+	}
+}
+
+// TestGetEndpoint tests if request endpoint can be fetched correctly
+func TestGetEndpoint(t *testing.T) {
+	tests := []struct {
+		Name     string
+		Endpoint []byte
+	}{
+		{
+			Name:     "Get Endpoint",
+			Endpoint: []byte("http://localhost:8080"),
+		},
+		{
+			Name:     "Endpoint is nil",
+			Endpoint: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := &Request{endpoint: test.Endpoint}
+			val := req.GetEndpoint()
+			assert.Equal(t, test.Endpoint, val)
+		})
+	}
+}
+
+// TestGetData tests if request data can be fetched correctly
+func TestGetData(t *testing.T) {
+	tests := []struct {
+		Name string
+		Data []byte
+	}{
+		{
+			Name: "Get Data",
+			Data: []byte(`{"id":"123"}`),
+		},
+		{
+			Name: "Data is nil",
+			Data: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := &Request{data: test.Data}
+			val := req.GetData()
+			assert.Equal(t, test.Data, val)
+		})
+	}
+}
+
+// TestGetResponse tests if request response can be fetched correctly
+func TestGetResponse(t *testing.T) {
+	tests := []struct {
+		Name     string
+		Response *http.Response
+	}{
+		{
+			Name:     "Get Response",
+			Response: &http.Response{},
+		},
+		{
+			Name:     "Response is nil",
+			Response: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := &Request{response: test.Response}
+			val := req.GetResponse()
+			assert.Equal(t, test.Response, val)
+		})
+	}
+}
+
+// TestAddHeader tests if request headers can be added correctly
+func TestAddHeader(t *testing.T) {
+	tests := []struct {
+		Name    string
+		Headers map[string]string
+		Key     string
+		Value   string
+	}{
+		{
+			Name:    "Header does not exist",
+			Headers: map[string]string{},
+			Key:     "Authorization",
+			Value:   "Bearer x.y.z",
+		},
+		{
+			Name: "Header already exists",
+			Headers: map[string]string{
+				"Authorization": "something",
+			},
+			Key:   "Authorization",
+			Value: "Bearer x.y.z",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := &Request{headers: test.Headers}
+			req.AddHeader(test.Key, test.Value)
+			val, ok := req.headers[test.Key]
+			assert.Equal(t, true, ok)
+			assert.Equal(t, test.Value, val)
+		})
+	}
+}
+
+// TestRemoveHeader tests if request headers can be removed correctly
+func TestRemoveHeader(t *testing.T) {
+	tests := []struct {
+		Name    string
+		Headers map[string]string
+		Key     string
+	}{
+		{
+			Name:    "Header does not exist",
+			Headers: map[string]string{},
+			Key:     "Authorization",
+		},
+		{
+			Name: "Header exists",
+			Headers: map[string]string{
+				"Authorization": "something",
+			},
+			Key: "Authorization",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := &Request{headers: test.Headers}
+			req.RemoveHeader(test.Key)
+			_, ok := req.headers[test.Key]
+			assert.Equal(t, false, ok)
+		})
+	}
+}
