@@ -44,8 +44,18 @@ func NewClient(opts ...Option) *Client {
 	return cl
 }
 
-func (c *Client) Get(
+// getClientForRequest returns an internal client to make a request with
+func (c *Client) getClientForRequest() HttpClient {
+	if c.constr != nil {
+		return c.constr()
+	} else {
+		return c.client
+	}
+}
+
+func (c *Client) Do(
 	ctx context.Context,
+	method string,
 	endpoint string,
 	body any,
 	marshaler Marshaler,
@@ -54,15 +64,9 @@ func (c *Client) Get(
 	pathParams ...string,
 ) (res *http.Response, err error) {
 
-	var cl HttpClient
-	if c.constr != nil {
-		cl = c.constr()
-	} else {
-		cl = c.client
-	}
-
+	cl := c.getClientForRequest()
 	req := newRequest(
-		ctx, c.mem, c.retr, cl, endpoint, "GET",
+		ctx, c.mem, c.retr, cl, endpoint, method,
 		body, marshaler, headers,
 		queryParam, pathParams,
 		c.functions,
@@ -77,6 +81,22 @@ func (c *Client) Get(
 	} else {
 		return res, nil
 	}
+}
+
+func (c *Client) Get(
+	ctx context.Context,
+	endpoint string,
+	body any,
+	marshaler Marshaler,
+	headers map[string]string,
+	queryParam map[string][]string,
+	pathParams ...string,
+) (res *http.Response, err error) {
+	return c.Do(
+		ctx, "GET", endpoint,
+		body, marshaler,
+		headers, queryParam, pathParams...,
+	)
 }
 
 func (c *Client) Post(
@@ -88,30 +108,11 @@ func (c *Client) Post(
 	queryParam map[string][]string,
 	pathParams ...string,
 ) (res *http.Response, err error) {
-
-	var cl HttpClient
-	if c.constr != nil {
-		cl = c.constr()
-	} else {
-		cl = c.client
-	}
-
-	req := newRequest(
-		ctx, c.mem, c.retr, cl, endpoint, "POST",
-		body, marshaler, headers,
-		queryParam, pathParams,
-		c.functions,
+	return c.Do(
+		ctx, "POST", endpoint,
+		body, marshaler,
+		headers, queryParam, pathParams...,
 	)
-
-	req.Next()
-
-	res = req.GetResponse()
-	errs := req.Errors()
-	if len(errs) > 0 {
-		return res, errs[0]
-	} else {
-		return res, nil
-	}
 }
 
 func (c *Client) Patch(
@@ -123,30 +124,27 @@ func (c *Client) Patch(
 	queryParam map[string][]string,
 	pathParams ...string,
 ) (res *http.Response, err error) {
-
-	var cl HttpClient
-	if c.constr != nil {
-		cl = c.constr()
-	} else {
-		cl = c.client
-	}
-
-	req := newRequest(
-		ctx, c.mem, c.retr, cl, endpoint, "PATCH",
-		body, marshaler, headers,
-		queryParam, pathParams,
-		c.functions,
+	return c.Do(
+		ctx, "PATCH", endpoint,
+		body, marshaler,
+		headers, queryParam, pathParams...,
 	)
+}
 
-	req.Next()
-
-	res = req.GetResponse()
-	errs := req.Errors()
-	if len(errs) > 0 {
-		return res, errs[0]
-	} else {
-		return res, nil
-	}
+func (c *Client) Put(
+	ctx context.Context,
+	endpoint string,
+	body any,
+	marshaler Marshaler,
+	headers map[string]string,
+	queryParam map[string][]string,
+	pathParams ...string,
+) (res *http.Response, err error) {
+	return c.Do(
+		ctx, "PUT", endpoint,
+		body, marshaler,
+		headers, queryParam, pathParams...,
+	)
 }
 
 func (c *Client) Delete(
@@ -158,28 +156,9 @@ func (c *Client) Delete(
 	queryParam map[string][]string,
 	pathParams ...string,
 ) (res *http.Response, err error) {
-
-	var cl HttpClient
-	if c.constr != nil {
-		cl = c.constr()
-	} else {
-		cl = c.client
-	}
-
-	req := newRequest(
-		ctx, c.mem, c.retr, cl, endpoint, "DELETE",
-		body, marshaler, headers,
-		queryParam, pathParams,
-		c.functions,
+	return c.Do(
+		ctx, "DELETE", endpoint,
+		body, marshaler,
+		headers, queryParam, pathParams...,
 	)
-
-	req.Next()
-
-	res = req.GetResponse()
-	errs := req.Errors()
-	if len(errs) > 0 {
-		return res, errs[0]
-	} else {
-		return res, nil
-	}
 }
