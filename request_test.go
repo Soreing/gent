@@ -528,6 +528,28 @@ func TestExecuteRequestWithRetrier(t *testing.T) {
 			Errors: []error{
 				context.DeadlineExceeded,
 			},
+		}, {
+			Name: "Making bad request",
+			Client: &mockHttpHandler{
+				dur:     time.Millisecond,
+				code:    500,
+				headers: map[string]string{},
+			},
+			Retrier: NewStatusCodeRetrier(5, func(int) time.Duration {
+				return time.Millisecond
+			}, []int{500}),
+			Headers:  map[string]string{},
+			Timeout:  time.Second,
+			Method:   "GET",
+			Endpoint: []byte(`http://localhost:8080`),
+			Data:     []byte{},
+			Called:   6,
+			Errors: []error{
+				fmt.Errorf(
+					"failed after max retries: %w",
+					fmt.Errorf("request failed with status code 500"),
+				),
+			},
 		},
 	}
 
