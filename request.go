@@ -163,7 +163,13 @@ func executeWithRetrier(ctx context.Context, r *Request) {
 		}
 
 		r.response, err = r.client.Do(req)
-		return r.retr.ShouldRetry(r.response, err)
+
+		err, retr := r.retr.ShouldRetry(r.response, err)
+		if retr && r.response != nil && r.response.Body != nil {
+			r.response.Body.Close()
+		}
+
+		return err, retr
 	})
 
 	if err != nil {
