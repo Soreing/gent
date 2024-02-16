@@ -217,15 +217,16 @@ func (r *Request) fmtEndpoint(
 
 	if len(queryPrm) > 0 {
 		wrt.writeByte('?')
-		begIdx := wrt.buf.len()
+		first := true
 		for k, vs := range queryPrm {
 			for _, v := range vs {
-				if len(wrt.buf.page) > begIdx {
+				if !first {
 					wrt.writeByte('&')
 				}
 				wrt.writeEscaped(k)
 				wrt.writeByte('=')
 				wrt.writeEscaped(v)
+				first = false
 			}
 		}
 	}
