@@ -1,7 +1,6 @@
 package gent
 
 import (
-	"context"
 	"net/http"
 )
 
@@ -16,10 +15,4 @@ type HttpClient interface {
 type MemoryPool interface {
 	Acquire() []byte
 	Release(...[]byte)
-}
-
-// Retrier defines a wrapper that can retry a request
-type Retrier interface {
-	Run(context.Context, func(ctx context.Context) (error, bool)) error
-	ShouldRetry(*http.Response, error) (error, bool)
 }

@@ -1,18 +1,14 @@
 package gent
 
 import (
-	"context"
 	"net/http"
 )
 
 // Configuration is a collection of options that apply to the client.
 type Configuration struct {
-	mempool       MemoryPool
-	retrier       Retrier
-	httpClient    HttpClient
-	newClientFn   func() HttpClient
-	hlmiddlewares []func(context.Context, *Request)
-	llmiddlewares []func(context.Context, *Request)
+	mempool     MemoryPool
+	httpClient  HttpClient
+	newClientFn func() HttpClient
 }
 
 // newConfiguration creates default configs and applies options
@@ -59,30 +55,6 @@ func UseHttpClientConstructor(constr func() HttpClient) Option {
 	}
 }
 
-// UseRetrier creates an option for adding a retrier that retries the request
-// until it succeeds.
-func UseRetrier(retr Retrier) Option {
-	return &retrierOption{
-		retr: retr,
-	}
-}
-
-// UseHighLevelMiddleware creates an option for adding a high level middleware
-// that is executed before the endpoint url and request data are processed.
-func UseHighLevelMiddleware(mdw func(context.Context, *Request)) Option {
-	return &highLevelMiddlewareOption{
-		mdw: mdw,
-	}
-}
-
-// UseLowLevelMiddleware creates an option for adding a low level middleware
-// that is executed before the headers are added and the request is executed.
-func UseLowLevelMiddleware(mdw func(context.Context, *Request)) Option {
-	return &lowLevelMiddlewareOption{
-		mdw: mdw,
-	}
-}
-
 type memPoolOption struct {
 	pool MemoryPool
 }
@@ -105,28 +77,4 @@ type httpClientConstructorOption struct {
 
 func (o *httpClientConstructorOption) Configure(c *Configuration) {
 	c.newClientFn = o.constr
-}
-
-type retrierOption struct {
-	retr Retrier
-}
-
-func (o *retrierOption) Configure(c *Configuration) {
-	c.retrier = o.retr
-}
-
-type highLevelMiddlewareOption struct {
-	mdw func(context.Context, *Request)
-}
-
-func (o *highLevelMiddlewareOption) Configure(c *Configuration) {
-	c.hlmiddlewares = append(c.hlmiddlewares, o.mdw)
-}
-
-type lowLevelMiddlewareOption struct {
-	mdw func(context.Context, *Request)
-}
-
-func (o *lowLevelMiddlewareOption) Configure(c *Configuration) {
-	c.llmiddlewares = append(c.llmiddlewares, o.mdw)
 }

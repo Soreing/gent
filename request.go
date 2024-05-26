@@ -5,38 +5,43 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 // Request stores details about the request
 type Request struct {
 	ctx    context.Context
 	mem    MemoryPool
-	retr   Retrier
 	client HttpClient
-	errors []error
+
+	mtx    *sync.Mutex
+	Values map[string]any
 
 	fns []func(context.Context, *Request)
 	fni int
 
-	format      string
-	method      string
-	body        any
-	marshaler   Marshaler
-	headers     map[string]string
-	queryParams map[string][]string
-	pathParams  []string
+	// Before Build
+	Format      string
+	Method      string
+	Body        any
+	Marshaler   Marshaler
+	Headers     map[string]string
+	QueryParams map[string][]string
+	PathParams  []string
 
-	endpoint []byte
-	data     []byte
+	// Before Execute
+	Endpoint []byte
+	Data     []byte
+	Request  *http.Request
+	Response *http.Response
 
-	response *http.Response
+	Errors []error
 }
 
 // newRequest creates a new Request context
 func newRequest(
 	ctx context.Context,
 	mem MemoryPool,
-	retr Retrier,
 	client HttpClient,
 	format string,
 	method string,
@@ -50,18 +55,46 @@ func newRequest(
 	return &Request{
 		ctx:         ctx,
 		mem:         mem,
-		retr:        retr,
 		client:      client,
+		mtx:         &sync.Mutex{},
+		Values:      map[string]any{},
 		fns:         fns,
 		fni:         0,
-		format:      format,
-		method:      method,
-		body:        body,
-		marshaler:   marshaler,
-		headers:     headers,
-		queryParams: queryParams,
-		pathParams:  pathParams,
+		Format:      format,
+		Method:      method,
+		Body:        body,
+		Marshaler:   marshaler,
+		Headers:     headers,
+		QueryParams: queryParams,
+		PathParams:  pathParams,
 	}
+}
+
+// Lock locks the mutex within the context
+func (r *Request) Lock() {
+	r.mtx.Lock()
+}
+
+// Unlock unlocks the mutex within the context
+func (r *Request) Unlock() {
+	r.mtx.Unlock()
+}
+
+// Set assigns some value to a key in the context's Values store. The operation
+// locks the context's mutex for thread safety.
+func (r *Request) Set(key string, val any) {
+	r.mtx.Lock()
+	r.Values[key] = val
+	r.mtx.Unlock()
+}
+
+// Get retrieves some value from the context's Values store by a key. The
+// operation locks the context's mutex for thread safety.
+func (r *Request) Get(key string) (val any, ok bool) {
+	r.mtx.Lock()
+	val, ok = r.Values[key]
+	r.mtx.Unlock()
+	return val, ok
 }
 
 // Next executes the next function on the function middleware on the request.
@@ -70,110 +103,67 @@ func (r *Request) Next() {
 	if r.fni < len(r.fns) {
 		r.fni++
 		r.fns[r.fni-1](r.ctx, r)
+		r.fni--
 	}
 }
 
 // Error inserts an error to the errors slice.
 func (r *Request) Error(err error) {
-	r.errors = append(r.errors, err)
-}
-
-// Errors retruns all the errors as a slice.
-func (r *Request) Errors() []error {
-	return r.errors
+	r.Errors = append(r.Errors, err)
 }
 
 // prepare formats the endpoint of the request and marshals the request body if
 // there is a body and a marshaler module provided.
 func prepare(ctx context.Context, r *Request) {
+	var endpoint, data []byte
+	var contentType string
 	var err error
 
-	r.endpoint, err = r.fmtEndpoint(
-		r.format,
-		r.queryParams,
-		r.pathParams,
-	)
+	// create endpoint string
+	endpoint, err = r.fmtEndpoint(r.Format, r.QueryParams, r.PathParams)
 	if err != nil {
 		r.Error(err)
 		return
 	}
 
-	if r.body != nil {
-		if r.marshaler != nil {
-			var ctype string
-			r.data, ctype, err = r.marshaler.Marshal(r.body)
-			if err != nil {
-				r.Error(err)
-				return
-			}
-			if _, ok := r.headers["Content-Type"]; !ok {
-				r.headers["Content-Type"] = ctype
-			}
-		} else {
-			r.Error(fmt.Errorf("marshaler is nil"))
+	// create body content
+	if r.Body != nil && r.Marshaler != nil {
+		data, contentType, err = r.Marshaler.Marshal(r.Body)
+		if err != nil {
+			r.Error(err)
 			return
 		}
 	}
 
+	// create request
+	body := bytes.NewReader(data)
+	req, err := http.NewRequestWithContext(ctx, r.Method, string(endpoint), body)
+	if err != nil {
+		r.Error(err)
+		return
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	for k, v := range r.Headers {
+		req.Header.Set(k, v)
+	}
+
+	r.Endpoint = endpoint
+	r.Data = data
+	r.Request = req
 	r.Next()
 }
 
 // execute creates an HTTP request from the method, url endpoint and content,
 // adds the headers to the request and uses the client to do the request.
 func execute(ctx context.Context, r *Request) {
-	req, err := http.NewRequestWithContext(
-		ctx,
-		r.method,
-		string(r.endpoint),
-		bytes.NewReader(r.data),
-	)
+	var err error
+
+	r.Response, err = r.client.Do(r.Request)
 	if err != nil {
 		r.Error(err)
 		return
-	}
-
-	for k, v := range r.headers {
-		req.Header.Add(k, v)
-	}
-
-	r.response, err = r.client.Do(req)
-	if err != nil {
-		r.Error(err)
-		return
-	}
-}
-
-// executeWithRetrier executes the request in the context of a retrier. The
-// request will be retried until the retrier's ShouldRetry function returns
-// false.
-func executeWithRetrier(ctx context.Context, r *Request) {
-	err := r.retr.Run(ctx, func(ctx context.Context) (error, bool) {
-		req, err := http.NewRequestWithContext(
-			ctx,
-			r.method,
-			string(r.endpoint),
-			bytes.NewReader(r.data),
-		)
-		if err != nil {
-			return err, false
-		}
-
-		for k, v := range r.headers {
-			req.Header.Add(k, v)
-		}
-
-		r.response, err = r.client.Do(req)
-
-		err, retr := r.retr.ShouldRetry(r.response, err)
-		if retr && r.response != nil && r.response.Body != nil {
-			r.response.Body.Close()
-		}
-
-		return err, retr
-	})
-
-	if err != nil {
-		r.Error(err)
 	}
 }
 
@@ -232,38 +222,4 @@ func (r *Request) fmtEndpoint(
 	}
 
 	return wrt.buf.build(nil), nil
-}
-
-func (r *Request) GetMethod() string {
-	return r.method
-}
-
-func (r *Request) GetHeader(k string) (v string, ok bool) {
-	v, ok = r.headers[k]
-	return
-}
-
-func (r *Request) GetQueryParam(k string) (v []string, ok bool) {
-	v, ok = r.queryParams[k]
-	return
-}
-
-func (r *Request) GetEndpoint() []byte {
-	return r.endpoint
-}
-
-func (r *Request) GetData() []byte {
-	return r.data
-}
-
-func (r *Request) GetResponse() *http.Response {
-	return r.response
-}
-
-func (r *Request) AddHeader(k, v string) {
-	r.headers[k] = v
-}
-
-func (r *Request) RemoveHeader(k string) {
-	delete(r.headers, k)
 }

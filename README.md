@@ -37,6 +37,27 @@ res, err := cl.Post(
     "create",
 )
 ```
+### Request Builder ⭒NEW⭒ 
+Requests can be constructed gradually with a request builder. Request require 
+at least an HTTP method and an endpoint, the other parameters are optional.
+```golang
+res, err := cl.NewRequest(
+    http.MethodGet, "http://localhost:8080/{}/{}",
+).WithBody(
+    map[string]string{
+        "id": "4481e035-1711-419f-82bc-bfb72da06375",
+        "name": "John Smith",
+    },
+    gent.NewJSONMarshaler(),
+).WithHeaders(
+    map[string]string{"Authorization": "Bearer x.y.z"},
+).WithQueryParameters(
+    map[string][]string{"strict": {"true"},},
+).WithPathParameters(
+    "employees", "create",
+).Run(context.Background())
+```
+
 
 ### Placeholders
 
@@ -115,34 +136,22 @@ cl := gent.NewClient(
 
 You can provide your own implementation of memory pool if it implements how to acquire byte arrays from the pool with `Acquire() []byte` and release byte arrays into the pool with `Release(...[]byte)`
 
-### Retrier
-
-Requests can be retried on failure if the client uses a retrier. The package provides two retrier implementations, one which only retries requests if they failed with an error, and one which can optionally retry requests which failed with specific status codes. Both retriers need a numeric limit on retries and a delay function that returns a duration to wait for before trying again.
-
-```golang
-cl := gent.NewClient(
-    gent.UseRetrier(gent.NewStatusCodeRetrier(
-        10, // Max retries (-1 for infinite)
-        retrier.ConstantDelay(time.Second), // Delay function
-        []int{418,425,429,500}, // Retried status codes
-    )),
-)
-```
-
-The [retrier](https://github.com/Soreing/retrier) package used internally has a range of delay functions to be used
-
 ### Middlewares
 
-Clients can be given middlewares that are executed for each request. There are two types of middlewares. High Level middlewares are executed before the endpoint is constructed from path and query parameters or the body is marshaled. Low Level middlewares are executed right before the request is constructed and handled by the internal client. 
+Clients can be given middlewares that are executed for each request. Middlewares can be 
+added to two stages. BeforeBuild middlewares run before the http.Request object is created,
+while BeforeExecute middlewares run before the request is sent.
 
-The following is an example of a middleware that injects an Authorization header.
+To add a middleware, use the Use function on the client.
 ```golang
-cl := gent.NewClient(
-    gent.UseLowLevelMiddleware(
-        func(c context.Context, r *gent.Request) {
-            r.AddHeader("Authorization", "Bearer x.y.z")
-            r.Next()
-        },
-    ),
+cl := gent.NewClient()
+
+// Middleware that adds an auth header to the request
+cl.Use(
+    gent.MDW_BeforeBuild, 
+    func(c context.Context, r *gent.Request) {
+        r.Headers["Authorization"] = "Bearer x.y.z"
+        r.Next()
+    },
 )
 ```

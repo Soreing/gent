@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestCreateClient tests that a client can be created
+// TestCreateClient tests that a client can be created.
 func TestCreateClient(t *testing.T) {
 	tests := []struct {
 		Name string
@@ -23,32 +23,24 @@ func TestCreateClient(t *testing.T) {
 
 			assert.NotNil(t, cl.mem)
 			assert.NotNil(t, cl.client)
-			assert.Nil(t, cl.retr)
 			assert.Nil(t, cl.constr)
-			assert.Equal(t, 2, len(cl.functions))
 		})
 	}
 }
 
-// TestCreateClient tests that a client can be created and configured
+// TestCreateClient tests that a client can be created and configured.
 func TestCreateClientWithOptions(t *testing.T) {
 	tests := []struct {
-		Name         string
-		MemPool      MemoryPool
-		Retrier      Retrier
-		Client       HttpClient
-		Constructor  func() HttpClient
-		HLMiddleware func(context.Context, *Request)
-		LLMiddleware func(context.Context, *Request)
+		Name        string
+		MemPool     MemoryPool
+		Client      HttpClient
+		Constructor func() HttpClient
 	}{
 		{
-			Name:         "Creating client with options",
-			MemPool:      &mockMemPool{},
-			Retrier:      &mockRetrier{},
-			Client:       &mockHttpClient{},
-			Constructor:  func() HttpClient { return &mockHttpClient{} },
-			HLMiddleware: func(context.Context, *Request) {},
-			LLMiddleware: func(context.Context, *Request) {},
+			Name:        "Creating client with options",
+			MemPool:     &mockMemPool{},
+			Client:      &mockHttpClient{},
+			Constructor: func() HttpClient { return &mockHttpClient{} },
 		},
 	}
 
@@ -56,22 +48,18 @@ func TestCreateClientWithOptions(t *testing.T) {
 		t.Run(test.Name, func(t *testing.T) {
 			cl := NewClient(
 				UseMemoryPool(test.MemPool),
-				UseRetrier(test.Retrier),
 				UseHttpClient(test.Client),
 				UseHttpClientConstructor(test.Constructor),
-				UseHighLevelMiddleware(test.HLMiddleware),
-				UseLowLevelMiddleware(test.LLMiddleware),
 			)
 
 			assert.Equal(t, test.MemPool, cl.mem)
 			assert.Equal(t, test.Client, cl.client)
 			assert.NotNil(t, cl.constr)
-			assert.Equal(t, 4, len(cl.functions))
 		})
 	}
 }
 
-// TestGetClientForRequest tests that a client is acquired from constructors
+// TestGetClientForRequest tests that a client is acquired from constructors.
 func TestGetClientForRequest(t *testing.T) {
 	tests := []struct {
 		Name           string
@@ -101,7 +89,7 @@ func TestGetClientForRequest(t *testing.T) {
 	}
 }
 
-// TestMakeRequest tests if a request can be made correctly
+// TestMakeRequest tests if a request can be made correctly.
 func TestMakeRequest(t *testing.T) {
 	tests := []struct {
 		Name        string
@@ -120,7 +108,7 @@ func TestMakeRequest(t *testing.T) {
 	}{
 		{
 			Name:   "Successful request",
-			Method: "POST",
+			Method: http.MethodPost,
 			Format: "http://localhost:8080/{}",
 			Body: map[string]any{
 				"test": "test",
@@ -199,7 +187,7 @@ func TestMakeRequest(t *testing.T) {
 	}
 }
 
-// TestGetRequest tests if a GET request can be made correctly
+// TestGetRequest tests if a GET request can be made correctly.
 func TestGetRequest(t *testing.T) {
 	tests := []struct {
 		Name   string
@@ -210,7 +198,7 @@ func TestGetRequest(t *testing.T) {
 		{
 			Name:   "Get request",
 			Format: "http://localhost:8080",
-			Method: "GET",
+			Method: http.MethodGet,
 			Error:  nil,
 		},
 	}
@@ -236,7 +224,7 @@ func TestGetRequest(t *testing.T) {
 	}
 }
 
-// TestPostRequest tests if a POST request can be made correctly
+// TestPostRequest tests if a POST request can be made correctly.
 func TestPostRequest(t *testing.T) {
 	tests := []struct {
 		Name   string
@@ -247,7 +235,7 @@ func TestPostRequest(t *testing.T) {
 		{
 			Name:   "Post request",
 			Format: "http://localhost:8080",
-			Method: "POST",
+			Method: http.MethodPost,
 			Error:  nil,
 		},
 	}
@@ -273,7 +261,7 @@ func TestPostRequest(t *testing.T) {
 	}
 }
 
-// TestPatchRequest tests if a PATCH request can be made correctly
+// TestPatchRequest tests if a PATCH request can be made correctly.
 func TestPatchRequest(t *testing.T) {
 	tests := []struct {
 		Name   string
@@ -284,7 +272,7 @@ func TestPatchRequest(t *testing.T) {
 		{
 			Name:   "Patch request",
 			Format: "http://localhost:8080",
-			Method: "PATCH",
+			Method: http.MethodPatch,
 			Error:  nil,
 		},
 	}
@@ -310,7 +298,7 @@ func TestPatchRequest(t *testing.T) {
 	}
 }
 
-// TestPutRequest tests if a PUT request can be made correctly
+// TestPutRequest tests if a PUT request can be made correctly.
 func TestPutRequest(t *testing.T) {
 	tests := []struct {
 		Name   string
@@ -321,7 +309,7 @@ func TestPutRequest(t *testing.T) {
 		{
 			Name:   "Put request",
 			Format: "http://localhost:8080",
-			Method: "PUT",
+			Method: http.MethodPut,
 			Error:  nil,
 		},
 	}
@@ -347,7 +335,7 @@ func TestPutRequest(t *testing.T) {
 	}
 }
 
-// TestDeleteRequest tests if a DELETE request can be made correctly
+// TestDeleteRequest tests if a DELETE request can be made correctly.
 func TestDeleteRequest(t *testing.T) {
 	tests := []struct {
 		Name   string
@@ -358,7 +346,7 @@ func TestDeleteRequest(t *testing.T) {
 		{
 			Name:   "Delete request",
 			Format: "http://localhost:8080",
-			Method: "DELETE",
+			Method: http.MethodDelete,
 			Error:  nil,
 		},
 	}
@@ -380,6 +368,111 @@ func TestDeleteRequest(t *testing.T) {
 
 			assert.Equal(t, test.Error, err)
 			assert.Equal(t, test.Method, intrn.method)
+		})
+	}
+}
+
+// TestUseBeforeBuildMiddleware tests adding middlewares before the build stage.
+func TestUseBeforeBuildMiddleware(t *testing.T) {
+	tests := []struct {
+		Name     string
+		Function func(context.Context, *Request)
+		Error    error
+	}{
+		{
+			Name:  "Middleware before build",
+			Error: nil,
+
+			Function: func(ctx context.Context, req *Request) {
+				req.QueryParams["order"] = []string{"desc"}
+				req.Next()
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			intrn := &mockHttpHandler{
+				code:    200,
+				err:     test.Error,
+				headers: map[string]string{},
+			}
+			cl := NewClient(UseHttpClient(intrn))
+
+			err := cl.Use(MDW_BeforeBuild, test.Function)
+
+			assert.Equal(t, test.Error, err)
+			assert.Equal(t, 0, len(cl.l1mdw))
+			assert.Equal(t, 1, len(cl.l2mdw))
+		})
+	}
+}
+
+// TestUseBeforeExecuteMiddleware tests adding middlewares before the execute stage.
+func TestUseBeforeExecuteMiddleware(t *testing.T) {
+	tests := []struct {
+		Name     string
+		Function func(context.Context, *Request)
+		Error    error
+	}{
+		{
+			Name:  "Middleware before execute",
+			Error: nil,
+
+			Function: func(ctx context.Context, req *Request) {
+				req.Request.Header.Set("Authorization", "x.y.z")
+				req.Next()
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			intrn := &mockHttpHandler{
+				code:    200,
+				err:     test.Error,
+				headers: map[string]string{},
+			}
+			cl := NewClient(UseHttpClient(intrn))
+
+			err := cl.Use(MDW_BeforeExecute, test.Function)
+
+			assert.Equal(t, test.Error, err)
+			assert.Equal(t, 1, len(cl.l1mdw))
+			assert.Equal(t, 0, len(cl.l2mdw))
+		})
+	}
+}
+
+// TestUseInvlaidMiddlewareStage tests adding middlewares to an invalid stage.
+func TestUseInvlaidMiddlewareStage(t *testing.T) {
+	tests := []struct {
+		Name     string
+		Function func(context.Context, *Request)
+		Error    error
+	}{
+		{
+			Name:  "Middleware invalid stage",
+			Error: fmt.Errorf("invalid middleware stage"),
+
+			Function: func(ctx context.Context, req *Request) {},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			intrn := &mockHttpHandler{
+				code:    200,
+				err:     test.Error,
+				headers: map[string]string{},
+			}
+			cl := NewClient(UseHttpClient(intrn))
+
+			err := cl.Use(MiddlewareStage(-1), test.Function)
+
+			assert.Equal(t, test.Error, err)
+			assert.Equal(t, 0, len(cl.l1mdw))
+			assert.Equal(t, 0, len(cl.l2mdw))
 		})
 	}
 }
