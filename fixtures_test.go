@@ -15,10 +15,6 @@ type mockHttpClient struct {
 	HttpClient
 }
 
-type mockRetrier struct {
-	retrier
-}
-
 type mockHttpHandler struct {
 	dur  time.Duration
 	err  error
