@@ -1,191 +1,118 @@
 package gent
 
 import (
-	"context"
-	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
 )
 
-// MiddlewareStage enumerates the stage in the request where middlewares are
-// attached. Middlewares can be added before the http.Request object is built,
-// or before the http.Request object is sent.
-type MiddlewareStage int
+// Requester defines an HTTP client that can do requests.
+type Requester interface {
+	Do(r *http.Request) (*http.Response, error)
+	CloseIdleConnections()
+}
 
-const (
-	MDW_BeforeBuild MiddlewareStage = iota
-	MDW_BeforeExecute
-)
-
-// Client wraps an http.Client with additional functionality.
+// Client wraps an http Client with additional features.
 type Client struct {
-	mem    MemoryPool
-	client HttpClient
-	constr func() HttpClient
-	l2mdw  []func(context.Context, *Request)
-	l1mdw  []func(context.Context, *Request)
+	cl   Requester
+	mdws []func(*Context)
 }
 
-// NewClient creates a Client with options.
-func NewClient(opts ...Option) *Client {
-	cfg := newConfiguration(opts)
-
-	return &Client{
-		mem:    cfg.mempool,
-		client: cfg.httpClient,
-		constr: cfg.newClientFn,
-		l2mdw:  []func(context.Context, *Request){},
-		l1mdw:  []func(context.Context, *Request){},
-	}
+// NewDefaultClient creates a Client from http.DefaultClient.
+func NewDefaultClient() *Client {
+	return &Client{cl: http.DefaultClient}
 }
 
-// Use attaches a middleware to the client's execution chain. Middlewares
-// added before build run before the http.Request object is created from the
-// http method, endpoint, headers, path query parameters and body. Middlewares
-// added before execute run before the http.Request obeject is sent.
+// NewClient creates a Client from the provided Requester.
+func NewClient(client Requester) *Client {
+	return &Client{cl: client}
+}
+
+// Use adds a middleware style handler function to the execution chain of
+// the requests performed by the client which run in the order they were added
+// before the client performs the request.
 func (c *Client) Use(
-	statge MiddlewareStage,
-	middlewares ...func(context.Context, *Request),
-) error {
-	switch statge {
-	case MDW_BeforeBuild:
-		c.l2mdw = append(c.l2mdw, middlewares...)
-	case MDW_BeforeExecute:
-		c.l1mdw = append(c.l1mdw, middlewares...)
-	default:
-		return fmt.Errorf("invalid middleware stage")
-	}
-	return nil
+	middlewares ...func(*Context),
+) {
+	c.mdws = append(c.mdws, middlewares...)
 }
 
-// getClientForRequest returns an internal client to make a request with.
-func (c *Client) getClientForRequest() HttpClient {
-	if c.constr != nil {
-		return c.constr()
-	} else {
-		return c.client
-	}
-}
-
-// Do runs an http request with all the given parameters.
+// Do sends an HTTP request and returns an HTTP response.
 func (c *Client) Do(
-	ctx context.Context,
-	method string,
-	endpoint string,
-	body any,
-	marshaler Marshaler,
-	headers map[string]string,
-	queryParam map[string][]string,
-	pathParams ...string,
+	req *http.Request,
 ) (res *http.Response, err error) {
+	fns := make([]func(*Context), 0, len(c.mdws)+1)
+	fns = append(fns, c.mdws...)
+	fns = append(fns, do)
 
-	fns := make(
-		[]func(context.Context, *Request),
-		0, len(c.l1mdw)+len(c.l2mdw)+2,
-	)
+	ctx := newRequestContext(c.cl, req, fns)
+	ctx.Next()
 
-	fns = append(fns, c.l2mdw...)
-	fns = append(fns, prepare)
-	fns = append(fns, c.l1mdw...)
-	fns = append(fns, execute)
-
-	cl := c.getClientForRequest()
-	req := newRequest(
-		ctx, c.mem, cl, endpoint, method,
-		body, marshaler, headers,
-		queryParam, pathParams,
-		fns,
-	)
-
-	req.Next()
-
-	if len(req.Errors) > 0 {
-		return req.Response, req.Errors[0]
-	} else {
-		return req.Response, nil
+	if len(ctx.Errors) > 0 {
+		return ctx.Response, ctx.Errors[0]
 	}
+	return ctx.Response, nil
 }
 
-// Get runs an http GET request with all the given parameters.
+// Get sends a GET HTTP request to the specified URL.
 func (c *Client) Get(
-	ctx context.Context,
-	endpoint string,
-	body any,
-	marshaler Marshaler,
-	headers map[string]string,
-	queryParam map[string][]string,
-	pathParams ...string,
+	url string,
 ) (res *http.Response, err error) {
-	return c.Do(
-		ctx, http.MethodGet, endpoint,
-		body, marshaler,
-		headers, queryParam, pathParams...,
-	)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req)
 }
 
-// Post runs an http POST request with all the given parameters.
+// Head sends a HEAD HTTP request to the specified URL.
+func (c *Client) Head(
+	url string,
+) (res *http.Response, err error) {
+	req, err := http.NewRequest(http.MethodHead, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req)
+}
+
+// Post sends a POST HTTP request to the specified URL with a content type
+// header and a request body.
 func (c *Client) Post(
-	ctx context.Context,
-	endpoint string,
-	body any,
-	marshaler Marshaler,
-	headers map[string]string,
-	queryParam map[string][]string,
-	pathParams ...string,
+	url string,
+	contentType string,
+	body io.Reader,
 ) (res *http.Response, err error) {
-	return c.Do(
-		ctx, http.MethodPost, endpoint,
-		body, marshaler,
-		headers, queryParam, pathParams...,
-	)
+	req, err := http.NewRequest(http.MethodPost, url, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", contentType)
+	return c.Do(req)
 }
 
-// Patch runs an http PATCH request with all the given parameters.
-func (c *Client) Patch(
-	ctx context.Context,
-	endpoint string,
-	body any,
-	marshaler Marshaler,
-	headers map[string]string,
-	queryParam map[string][]string,
-	pathParams ...string,
+// PostForm sends a POST HTTP request to the specified URL with a content type
+// header of application/x-www-form-urlencoded and url encoded values as
+// the request body.
+func (c *Client) PostForm(
+	url string,
+	data url.Values,
 ) (res *http.Response, err error) {
-	return c.Do(
-		ctx, http.MethodPatch, endpoint,
-		body, marshaler,
-		headers, queryParam, pathParams...,
-	)
+	body := strings.NewReader(data.Encode())
+	req, err := http.NewRequest(http.MethodPost, url, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return c.Do(req)
 }
 
-// Put runs an http PUT request with all the given parameters.
-func (c *Client) Put(
-	ctx context.Context,
-	endpoint string,
-	body any,
-	marshaler Marshaler,
-	headers map[string]string,
-	queryParam map[string][]string,
-	pathParams ...string,
-) (res *http.Response, err error) {
-	return c.Do(
-		ctx, http.MethodPut, endpoint,
-		body, marshaler,
-		headers, queryParam, pathParams...,
-	)
-}
-
-// Delete runs an http DELETE request with all the given parameters.
-func (c *Client) Delete(
-	ctx context.Context,
-	endpoint string,
-	body any,
-	marshaler Marshaler,
-	headers map[string]string,
-	queryParam map[string][]string,
-	pathParams ...string,
-) (res *http.Response, err error) {
-	return c.Do(
-		ctx, http.MethodDelete, endpoint,
-		body, marshaler,
-		headers, queryParam, pathParams...,
-	)
+// CloseIdleConnections closes idle connections on the underlying Requester.
+func (c *Client) CloseIdleConnections() {
+	c.cl.CloseIdleConnections()
 }
