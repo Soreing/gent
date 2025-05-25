@@ -16,6 +16,7 @@ to make requests.
 ```golang
 //  type Requester interface {
 //      Do(*http.Request) (*http.Response, error)
+//      CloseIdleConnections()
 //  }
 
 cl := gent.NewClient(http.DefaultClient)
@@ -80,7 +81,7 @@ will be replaced by encoded path parameters in the order they were provided.
 Any object can be provided as a request body along with a marshaler that will
 encode the object and attach some optional headers to the request. The package
 provides JSON, XML and URL-Encoded Form marshalers, but any function with the 
-signature `func(any) ([]byte, map[string]string, error)` is a valid marshaler.
+signature `func(any) ([]byte, map[string][]string, error)` is a valid marshaler.
 
 ```golang
 // JsonMarshaler uses the standard encoding/json marshaler to return the
@@ -94,7 +95,7 @@ func JsonMarshaler(body any) (dat []byte, hdrs map[string][]string, err error) {
 
 ### Middlewares
 
-Clients can use middleware-style functions that extend its behavior when making 
+A Client can use middleware-style functions that extend its behavior when making 
 requests. Middleware functions run in the order they were attached, and the last
 function performs the request. Each function has a request context to pass data
 between middlewares, or to interact with the request or response. Use the Next()
