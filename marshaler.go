@@ -3,63 +3,40 @@ package gent
 import (
 	"encoding/json"
 	"encoding/xml"
-	"fmt"
 	"net/url"
 )
 
-// Marshaler  defines how to convert an object into a byte  array and its
-// content type for making HTTP requests.
-type Marshaler interface {
-	Marshal(body any) (data []byte, content string, err error)
-}
+// Marshaler defines how to process an object into byte array for a request's
+// body, with additional optional headers to set.
+type Marshaler func(body any) ([]byte, map[string][]string, error)
 
-// jsonMarshaler is a marshaler for application/json content type.
-type jsonMarshaler struct{}
-
-// NewJSONMarshaler creates a marshaler for application/json content type.
-func NewJSONMarshaler() Marshaler {
-	return &jsonMarshaler{}
-}
-
-// Marshal returns an object encoded into a byte array and its content type.
-func (m *jsonMarshaler) Marshal(v any) (dat []byte, t string, err error) {
-	t = "application/json"
-	dat, err = json.Marshal(v)
+// JsonMarshaler uses the standard encoding/json marshaler to return the
+// json encoded body and a Content-Type application/json header.
+func JsonMarshaler(body any) (dat []byte, hdrs map[string][]string, err error) {
+	hdrs = map[string][]string{"Content-Type": {"application/json"}}
+	dat, err = json.Marshal(body)
 	return
 }
 
-// xmlMarshaler is a marshaler for application/xml content type.
-type xmlMarshaler struct{}
-
-// NewXMLMarshaler creates a marshaler for application/xml content type.
-func NewXMLMarshaler() Marshaler {
-	return &xmlMarshaler{}
-}
-
-// Marshal returns an object encoded into a byte array and its content type.
-func (m *xmlMarshaler) Marshal(v any) (dat []byte, t string, err error) {
-	t = "application/xml"
-	dat, err = xml.Marshal(v)
+// XmlMarshaler uses the standard encoding/xml marshaler to return the
+// xml encoded body and a Content-Type application/xml header.
+func XmlMarshaler(body any) (dat []byte, hdrs map[string][]string, err error) {
+	hdrs = map[string][]string{"Content-Type": {"application/xml"}}
+	dat, err = xml.Marshal(body)
 	return
 }
 
-// formMarshaler is a marshaler for application/x-www-form-urlencoded content type.
-type formMarshaler struct{}
-
-// NewXMLMarshaler creates a marshaler for application/x-www-form-urlencoded content type.
-func NewFormMarshaler() Marshaler {
-	return &formMarshaler{}
-}
-
-// Marshal returns an object encoded into a byte array and its content type.
-func (m *formMarshaler) Marshal(v any) (dat []byte, t string, err error) {
-	t = "application/x-www-form-urlencoded"
-	if vls, ok := v.(url.Values); ok {
-		dat = []byte(vls.Encode())
-	} else if mp, ok := v.(map[string][]string); ok {
-		dat = []byte(url.Values(mp).Encode())
+// UrlEncodedMarshaler uses the standard net/url encoder to return the
+// url encoded body and a Content-Type application/x-www-form-urlencoded header.
+func UrlEncodedMarshaler(body any) (dat []byte, hdrs map[string][]string, err error) {
+	if vals, ok := body.(map[string][]string); ok {
+		dat = []byte(url.Values(vals).Encode())
+	} else if vals, ok := body.(url.Values); ok {
+		dat = []byte(vals.Encode())
 	} else {
-		err = fmt.Errorf("invalid body type")
+		return nil, nil, ErrInvalidBodyType
 	}
+
+	hdrs = map[string][]string{"Content-Type": {"application/x-www-form-urlencoded"}}
 	return
 }

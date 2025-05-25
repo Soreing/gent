@@ -1,478 +1,327 @@
 package gent
 
 import (
-	"context"
+	"bytes"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// TestCreateClient tests that a client can be created.
-func TestCreateClient(t *testing.T) {
+// TestNewDefaultClient tests creating a default client.
+func TestNewDefaultClient(t *testing.T) {
 	tests := []struct {
 		Name string
 	}{
-		{Name: "Creating client with no options"},
+		{Name: "New default client"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			cl := NewClient()
+			cl := NewDefaultClient()
 
-			assert.NotNil(t, cl.mem)
-			assert.NotNil(t, cl.client)
-			assert.Nil(t, cl.constr)
+			assert.Nil(t, cl.mdws)
+			assert.Equal(t, http.DefaultClient, cl.cl)
 		})
 	}
 }
 
-// TestCreateClient tests that a client can be created and configured.
-func TestCreateClientWithOptions(t *testing.T) {
+// TestNewClient tests creating a client.
+func TestNewClient(t *testing.T) {
 	tests := []struct {
-		Name        string
-		MemPool     MemoryPool
-		Client      HttpClient
-		Constructor func() HttpClient
+		Name      string
+		Requester Requester
 	}{
 		{
-			Name:        "Creating client with options",
-			MemPool:     &mockMemPool{},
-			Client:      &mockHttpClient{},
-			Constructor: func() HttpClient { return &mockHttpClient{} },
+			Name:      "New client",
+			Requester: &mockRequester{},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			cl := NewClient(
-				UseMemoryPool(test.MemPool),
-				UseHttpClient(test.Client),
-				UseHttpClientConstructor(test.Constructor),
-			)
+			cl := NewClient(test.Requester)
 
-			assert.Equal(t, test.MemPool, cl.mem)
-			assert.Equal(t, test.Client, cl.client)
-			assert.NotNil(t, cl.constr)
+			assert.Nil(t, cl.mdws)
+			assert.Equal(t, test.Requester, cl.cl)
 		})
 	}
 }
 
-// TestGetClientForRequest tests that a client is acquired from constructors.
-func TestGetClientForRequest(t *testing.T) {
+// TestClientUse tests adding middlewares to the client.
+func TestClientUse(t *testing.T) {
 	tests := []struct {
-		Name           string
-		Client         *Client
-		InternalClient HttpClient
+		Name      string
+		Client    *Client
+		Before    []func(*Context)
+		Functions []func(*Context)
+		After     []func(*Context)
 	}{
 		{
-			Name:           "Creating client without constructor",
-			Client:         NewClient(),
-			InternalClient: http.DefaultClient,
-		},
-		{
-			Name: "Creating client with constructor",
-			Client: NewClient(UseHttpClientConstructor(
-				func() HttpClient { return &mockHttpClient{} },
-			)),
-			InternalClient: &mockHttpClient{},
+			Name:   "New client",
+			Client: NewDefaultClient(),
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			intrn := test.Client.getClientForRequest()
+			cl := NewDefaultClient()
+			cl.mdws = test.Before
 
-			assert.Equal(t, test.InternalClient, intrn)
+			cl.Use(test.Functions...)
+
+			assert.Equal(t, test.After, cl.mdws)
 		})
 	}
 }
 
-// TestMakeRequest tests if a request can be made correctly.
-func TestMakeRequest(t *testing.T) {
+// TestClientDo tests making a request.
+func TestClientDo(t *testing.T) {
 	tests := []struct {
-		Name        string
-		Method      string
-		Format      string
-		Body        any
-		Marshaler   Marshaler
-		Headers     map[string]string
-		QueryParams map[string][]string
-		PathParams  []string
-
-		Data       []byte
-		Endpoint   []byte
-		StatusCode int
-		Error      error
+		Name      string
+		Requester *mockRequester
+		Url       string
+		Error     bool
 	}{
 		{
-			Name:   "Successful request",
-			Method: http.MethodPost,
-			Format: "http://localhost:8080/{}",
-			Body: map[string]any{
-				"test": "test",
-			},
-			Marshaler: NewJSONMarshaler(),
-			Headers: map[string]string{
-				"Authorization": "Bearer x.y.z",
-			},
-			QueryParams: map[string][]string{
-				"query": {"query"},
-			},
-			PathParams: []string{
-				"param",
-			},
-			Data:       []byte(`{"test":"test"}`),
-			Endpoint:   []byte("http://localhost:8080/param?query=query"),
-			StatusCode: 201,
-			Error:      nil,
+			Name:      "Successful request",
+			Url:       "https://localhost:8080",
+			Requester: &mockRequester{},
+			Error:     false,
 		},
 		{
-			Name:   "Unsuccessful request",
-			Method: "GET",
-			Format: "http://localhost:8080/{}",
-			Body: map[string]any{
-				"test": "test",
+			Name: "Request Failed",
+			Url:  "https://localhost:8080",
+			Requester: &mockRequester{
+				RequestErr: fmt.Errorf("failed"),
 			},
-			Marshaler: NewJSONMarshaler(),
-			Headers: map[string]string{
-				"Authorization": "Bearer x.y.z",
-			},
-			QueryParams: map[string][]string{
-				"query": {"query"},
-			},
-			PathParams: []string{
-				"param",
-			},
-			Data:       []byte(`{"test":"test"}`),
-			Endpoint:   []byte("http://localhost:8080/param?query=query"),
-			StatusCode: 500,
-			Error:      fmt.Errorf("request failed"),
+			Error: true,
+		},
+		{
+			Name:      "Failed making request",
+			Url:       string([]byte{0x0}),
+			Requester: &mockRequester{},
+			Error:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    test.StatusCode,
-				err:     test.Error,
-				headers: map[string]string{},
-			}
-			cl := NewClient(UseHttpClient(intrn))
+			cl := NewClient(test.Requester)
 
-			res, err := cl.Do(
-				context.TODO(),
-				test.Method,
-				test.Format,
-				test.Body,
-				test.Marshaler,
-				test.Headers,
-				test.QueryParams,
-				test.PathParams...,
-			)
+			res, err := cl.Get(test.Url)
 
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, test.Method, intrn.method)
-			assert.Equal(t, test.Endpoint, intrn.endpoint)
-			assert.Equal(t, test.Data, intrn.data)
-
-			if test.Error != nil {
+			if test.Error {
 				assert.Nil(t, res)
+				assert.NotNil(t, err)
 			} else {
+				assert.Nil(t, err)
 				assert.NotNil(t, res)
-				assert.Equal(t, test.StatusCode, res.StatusCode)
+				assert.Equal(t, 1, test.Requester.CountCalled)
+				assert.Equal(t, http.MethodGet, test.Requester.LastRequest.Method)
 			}
 		})
 	}
 }
 
-// TestGetRequest tests if a GET request can be made correctly.
-func TestGetRequest(t *testing.T) {
+// TestClientGet tests making a GET request.
+func TestClientGet(t *testing.T) {
 	tests := []struct {
-		Name   string
-		Format string
-		Method string
-		Error  error
+		Name      string
+		Requester *mockRequester
+		Url       string
+		Error     bool
 	}{
 		{
-			Name:   "Get request",
-			Format: "http://localhost:8080",
-			Method: http.MethodGet,
-			Error:  nil,
+			Name:      "Successful request",
+			Url:       "https://localhost:8080",
+			Requester: &mockRequester{},
+			Error:     false,
+		},
+		{
+			Name:      "Failed making request",
+			Url:       string([]byte{0x0}),
+			Requester: &mockRequester{},
+			Error:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    200,
-				err:     test.Error,
-				headers: map[string]string{},
+			cl := NewClient(test.Requester)
+
+			res, err := cl.Get(test.Url)
+
+			if test.Error {
+				assert.Nil(t, res)
+				assert.NotNil(t, err)
+			} else {
+				assert.Nil(t, err)
+				assert.NotNil(t, res)
+				assert.Equal(t, 1, test.Requester.CountCalled)
+				assert.Equal(t, http.MethodGet, test.Requester.LastRequest.Method)
 			}
-			cl := NewClient(UseHttpClient(intrn))
-
-			_, err := cl.Get(
-				context.TODO(),
-				test.Format,
-				nil, nil, nil, nil,
-			)
-
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, test.Method, intrn.method)
 		})
 	}
 }
 
-// TestPostRequest tests if a POST request can be made correctly.
-func TestPostRequest(t *testing.T) {
+// TestClientHead tests making a HEAD request.
+func TestClientHead(t *testing.T) {
 	tests := []struct {
-		Name   string
-		Format string
-		Method string
-		Error  error
+		Name      string
+		Requester *mockRequester
+		Url       string
+		Error     bool
 	}{
 		{
-			Name:   "Post request",
-			Format: "http://localhost:8080",
-			Method: http.MethodPost,
-			Error:  nil,
+			Name:      "Successful request",
+			Url:       "https://localhost:8080",
+			Requester: &mockRequester{},
+			Error:     false,
+		},
+		{
+			Name:      "Failed making request",
+			Url:       string([]byte{0x0}),
+			Requester: &mockRequester{},
+			Error:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    200,
-				err:     test.Error,
-				headers: map[string]string{},
+			cl := NewClient(test.Requester)
+
+			res, err := cl.Head(test.Url)
+
+			if test.Error {
+				assert.Nil(t, res)
+				assert.NotNil(t, err)
+			} else {
+				assert.Nil(t, err)
+				assert.NotNil(t, res)
+				assert.Equal(t, 1, test.Requester.CountCalled)
+				assert.Equal(t, http.MethodHead, test.Requester.LastRequest.Method)
 			}
-			cl := NewClient(UseHttpClient(intrn))
-
-			_, err := cl.Post(
-				context.TODO(),
-				test.Format,
-				nil, nil, nil, nil,
-			)
-
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, test.Method, intrn.method)
 		})
 	}
 }
 
-// TestPatchRequest tests if a PATCH request can be made correctly.
-func TestPatchRequest(t *testing.T) {
+// TestClientPost tests making a POST request.
+func TestClientPost(t *testing.T) {
 	tests := []struct {
-		Name   string
-		Format string
-		Method string
-		Error  error
+		Name      string
+		Requester *mockRequester
+		Url       string
+		Error     bool
 	}{
 		{
-			Name:   "Patch request",
-			Format: "http://localhost:8080",
-			Method: http.MethodPatch,
-			Error:  nil,
+			Name:      "Successful request",
+			Url:       "https://localhost:8080",
+			Requester: &mockRequester{},
+			Error:     false,
+		},
+		{
+			Name:      "Failed making request",
+			Url:       string([]byte{0x0}),
+			Requester: &mockRequester{},
+			Error:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    200,
-				err:     test.Error,
-				headers: map[string]string{},
+			cl := NewClient(test.Requester)
+
+			cype := "application/json"
+			body := []byte(`{"name": "John Smith"}`)
+			res, err := cl.Post(test.Url, cype, bytes.NewBuffer(body))
+
+			if test.Error {
+				assert.Nil(t, res)
+				assert.NotNil(t, err)
+			} else {
+				assert.Nil(t, err)
+				assert.NotNil(t, res)
+				assert.Equal(t, 1, test.Requester.CountCalled)
+				assert.Equal(t, http.MethodPost, test.Requester.LastRequest.Method)
+
+				rbody, _ := io.ReadAll(test.Requester.LastRequest.Body)
+				assert.Equal(t, body, rbody)
+				assert.Equal(t, cype, test.Requester.LastRequest.Header.Get("Content-Type"))
 			}
-			cl := NewClient(UseHttpClient(intrn))
-
-			_, err := cl.Patch(
-				context.TODO(),
-				test.Format,
-				nil, nil, nil, nil,
-			)
-
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, test.Method, intrn.method)
 		})
 	}
 }
 
-// TestPutRequest tests if a PUT request can be made correctly.
-func TestPutRequest(t *testing.T) {
+// TestClientPostForm tests making a POST form request.
+func TestClientPostForm(t *testing.T) {
 	tests := []struct {
-		Name   string
-		Format string
-		Method string
-		Error  error
+		Name      string
+		Requester *mockRequester
+		Url       string
+		Error     bool
 	}{
 		{
-			Name:   "Put request",
-			Format: "http://localhost:8080",
-			Method: http.MethodPut,
-			Error:  nil,
+			Name:      "Successful request",
+			Url:       "https://localhost:8080",
+			Requester: &mockRequester{},
+			Error:     false,
+		},
+		{
+			Name:      "Failed making request",
+			Url:       string([]byte{0x0}),
+			Requester: &mockRequester{},
+			Error:     true,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    200,
-				err:     test.Error,
-				headers: map[string]string{},
+			cl := NewClient(test.Requester)
+
+			vals := url.Values{}
+			vals.Add("name", "John Smith")
+			res, err := cl.PostForm(test.Url, vals)
+
+			if test.Error {
+				assert.Nil(t, res)
+				assert.NotNil(t, err)
+			} else {
+				assert.Nil(t, err)
+				assert.NotNil(t, res)
+				assert.Equal(t, 1, test.Requester.CountCalled)
+				assert.Equal(t, http.MethodPost, test.Requester.LastRequest.Method)
+
+				rbody, _ := io.ReadAll(test.Requester.LastRequest.Body)
+				assert.Equal(t, []byte(vals.Encode()), rbody)
+				assert.Equal(
+					t, "application/x-www-form-urlencoded",
+					test.Requester.LastRequest.Header.Get("Content-Type"),
+				)
 			}
-			cl := NewClient(UseHttpClient(intrn))
-
-			_, err := cl.Put(
-				context.TODO(),
-				test.Format,
-				nil, nil, nil, nil,
-			)
-
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, test.Method, intrn.method)
 		})
 	}
 }
 
-// TestDeleteRequest tests if a DELETE request can be made correctly.
-func TestDeleteRequest(t *testing.T) {
+// TestClientCloseIdleConnections tests closing idle connections.
+func TestClientCloseIdleConnections(t *testing.T) {
 	tests := []struct {
-		Name   string
-		Format string
-		Method string
-		Error  error
+		Name string
 	}{
-		{
-			Name:   "Delete request",
-			Format: "http://localhost:8080",
-			Method: http.MethodDelete,
-			Error:  nil,
-		},
+		{Name: "Close"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    200,
-				err:     test.Error,
-				headers: map[string]string{},
-			}
-			cl := NewClient(UseHttpClient(intrn))
+			req := &mockRequester{}
+			cl := NewClient(req)
 
-			_, err := cl.Delete(
-				context.TODO(),
-				test.Format,
-				nil, nil, nil, nil,
-			)
+			cl.CloseIdleConnections()
 
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, test.Method, intrn.method)
-		})
-	}
-}
-
-// TestUseBeforeBuildMiddleware tests adding middlewares before the build stage.
-func TestUseBeforeBuildMiddleware(t *testing.T) {
-	tests := []struct {
-		Name     string
-		Function func(context.Context, *Request)
-		Error    error
-	}{
-		{
-			Name:  "Middleware before build",
-			Error: nil,
-
-			Function: func(ctx context.Context, req *Request) {
-				req.QueryParams["order"] = []string{"desc"}
-				req.Next()
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    200,
-				err:     test.Error,
-				headers: map[string]string{},
-			}
-			cl := NewClient(UseHttpClient(intrn))
-
-			err := cl.Use(MDW_BeforeBuild, test.Function)
-
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, 0, len(cl.l1mdw))
-			assert.Equal(t, 1, len(cl.l2mdw))
-		})
-	}
-}
-
-// TestUseBeforeExecuteMiddleware tests adding middlewares before the execute stage.
-func TestUseBeforeExecuteMiddleware(t *testing.T) {
-	tests := []struct {
-		Name     string
-		Function func(context.Context, *Request)
-		Error    error
-	}{
-		{
-			Name:  "Middleware before execute",
-			Error: nil,
-
-			Function: func(ctx context.Context, req *Request) {
-				req.Request.Header.Set("Authorization", "x.y.z")
-				req.Next()
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    200,
-				err:     test.Error,
-				headers: map[string]string{},
-			}
-			cl := NewClient(UseHttpClient(intrn))
-
-			err := cl.Use(MDW_BeforeExecute, test.Function)
-
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, 1, len(cl.l1mdw))
-			assert.Equal(t, 0, len(cl.l2mdw))
-		})
-	}
-}
-
-// TestUseInvlaidMiddlewareStage tests adding middlewares to an invalid stage.
-func TestUseInvlaidMiddlewareStage(t *testing.T) {
-	tests := []struct {
-		Name     string
-		Function func(context.Context, *Request)
-		Error    error
-	}{
-		{
-			Name:  "Middleware invalid stage",
-			Error: fmt.Errorf("invalid middleware stage"),
-
-			Function: func(ctx context.Context, req *Request) {},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.Name, func(t *testing.T) {
-			intrn := &mockHttpHandler{
-				code:    200,
-				err:     test.Error,
-				headers: map[string]string{},
-			}
-			cl := NewClient(UseHttpClient(intrn))
-
-			err := cl.Use(MiddlewareStage(-1), test.Function)
-
-			assert.Equal(t, test.Error, err)
-			assert.Equal(t, 0, len(cl.l1mdw))
-			assert.Equal(t, 0, len(cl.l2mdw))
+			assert.Equal(t, 1, req.ClosedCount)
 		})
 	}
 }

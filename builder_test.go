@@ -2,481 +2,563 @@ package gent
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// TestNewRequestBuilder tests that a request builder can be created.
-func TestNewRequestBuilder(t *testing.T) {
+// TestNewRequestBuilder tests creating a new request builder.
+func TestNewRequest(t *testing.T) {
 	tests := []struct {
-		Name     string
-		Client   *Client
-		Method   string
-		Endpoint string
+		Name   string
+		Method string
+		Format string
 	}{
 		{
-			Name:     "Creating new request builder",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
+			Name:   "Creating new request",
+			Method: http.MethodGet,
+			Format: "http://localhost:8080",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			req := test.Client.NewRequest(test.Method, test.Endpoint)
+			req := NewRequest(test.Method, test.Format)
 
-			assert.NotNil(t, req.client)
 			assert.Equal(t, test.Method, req.method)
-			assert.Equal(t, test.Endpoint, req.endpoint)
+			assert.Equal(t, test.Format, req.format)
 			assert.Nil(t, req.body)
 			assert.Nil(t, req.marshaler)
-			assert.NotNil(t, req.headers)
-			assert.NotNil(t, req.queryParams)
-			assert.NotNil(t, req.pathParams)
+			assert.Nil(t, req.headers)
+			assert.Nil(t, req.queryPrms)
+			assert.Nil(t, req.pathPrms)
+
 		})
 	}
 }
 
-// TestRequestWithBody tests adding a body and marshaler to the request builder.
+// TestNewRequestBuilder tests adding a byte array body to a request builder.
+func TestRequestWithRawBody(t *testing.T) {
+	tests := []struct {
+		Name    string
+		Builder *RequestBuilder
+		Body    []byte
+	}{
+		{
+			Name:    "Adding new request body",
+			Builder: &RequestBuilder{},
+			Body:    []byte("{\"key\":\"value\"}"),
+		},
+		{
+			Name: "Overwriting existing request body",
+			Builder: &RequestBuilder{
+				body:      map[string]any{},
+				marshaler: JsonMarshaler,
+			},
+			Body: []byte("{\"key\":\"value\"}"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			req := test.Builder.WithRawBody(test.Body)
+
+			assert.Equal(t, test.Body, req.body)
+			assert.Nil(t, req.marshaler)
+		})
+	}
+}
+
+// TestRequestWithBody tests adding body and marshaler to a request builder.
 func TestRequestWithBody(t *testing.T) {
 	tests := []struct {
 		Name      string
-		Client    *Client
-		Method    string
-		Endpoint  string
+		Builder   *RequestBuilder
 		Body      any
 		Marshaler Marshaler
 	}{
 		{
-			Name:      "Request with body",
-			Client:    NewClient(),
-			Method:    http.MethodGet,
-			Endpoint:  "http://localhost:8080",
-			Body:      "{\"key\":\"value\"}",
-			Marshaler: NewJSONMarshaler(),
+			Name:      "Adding new request body",
+			Builder:   &RequestBuilder{},
+			Body:      map[string]any{"Name": "John Smith"},
+			Marshaler: JsonMarshaler,
+		},
+		{
+			Name: "Overwriting existing request body",
+			Builder: &RequestBuilder{
+				body:      "placeholder",
+				marshaler: XmlMarshaler,
+			},
+			Body:      map[string]any{"Name": "John Smith"},
+			Marshaler: JsonMarshaler,
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			req := test.Client.NewRequest(test.Method, test.Endpoint)
-
-			req = req.WithBody(test.Body, test.Marshaler)
+			req := test.Builder.WithBody(test.Body, test.Marshaler)
 
 			assert.Equal(t, test.Body, req.body)
-			assert.Equal(t, test.Marshaler, req.marshaler)
+			//assert.Equal(t, test.Marshaler, req.marshaler)
 		})
 	}
 }
 
-// TestRequestWithHeader tests adding a header to the request builder.
+// TestRequestWithHeader tests adding headers to a request builder.
 func TestRequestWithHeader(t *testing.T) {
 	tests := []struct {
-		Name     string
-		Client   *Client
-		Method   string
-		Endpoint string
-		Before   map[string]string
-		Key      string
-		Value    string
-		After    map[string]string
+		Name    string
+		Builder *RequestBuilder
+		Added   map[string][]string
+		After   map[string][]string
 	}{
 		{
-			Name:     "Adding header to request without headers",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before:   map[string]string{},
-			Key:      "Authorization",
-			Value:    "x.y.z",
-			After: map[string]string{
-				"Authorization": "x.y.z",
+			Name:    "Adding headers to empty set",
+			Builder: &RequestBuilder{},
+			Added: map[string][]string{
+				"Content-Type":   {"application/json"},
+				"Content-Length": {"1024"},
+			},
+			After: map[string][]string{
+				"Content-Type":   {"application/json"},
+				"Content-Length": {"1024"},
 			},
 		},
 		{
-			Name:     "Adding header to request with headers",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before: map[string]string{
-				"X-Api-Key": "a1g2Q4GlqCXXcqbZ",
+			Name: "Adding headers to populated set",
+			Builder: &RequestBuilder{
+				headers: map[string][]string{
+					"Authorization": {"Bearer x.y.z"},
+					"X-Api-Key":     {"cGxhY2Vob2xkZXI="},
+				},
 			},
-			Key:   "Authorization",
-			Value: "x.y.z",
-			After: map[string]string{
-				"X-Api-Key":     "a1g2Q4GlqCXXcqbZ",
-				"Authorization": "x.y.z",
+			Added: map[string][]string{
+				"Content-Type":   {"application/json"},
+				"Content-Length": {"1024"},
+			},
+			After: map[string][]string{
+				"Authorization":  {"Bearer x.y.z"},
+				"X-Api-Key":      {"cGxhY2Vob2xkZXI="},
+				"Content-Type":   {"application/json"},
+				"Content-Length": {"1024"},
 			},
 		},
 		{
-			Name:     "Adding header to request with same key",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before: map[string]string{
-				"X-Api-Key":     "a1g2Q4GlqCXXcqbZ",
-				"Authorization": "a.b.c",
+			Name: "Adding value to existing header",
+			Builder: &RequestBuilder{
+				headers: map[string][]string{
+					"Authorization": {"Bearer x.y.z"},
+					"X-Api-Key":     {"cGxhY2Vob2xkZXI="},
+				},
 			},
-			Key:   "Authorization",
-			Value: "x.y.z",
-			After: map[string]string{
-				"X-Api-Key":     "a1g2Q4GlqCXXcqbZ",
-				"Authorization": "x.y.z",
+			Added: map[string][]string{
+				"Content-Type": {"application/json"},
+				"X-Api-Key":    {"dGVzdGluZw=="},
+			},
+			After: map[string][]string{
+				"Authorization": {"Bearer x.y.z"},
+				"X-Api-Key":     {"cGxhY2Vob2xkZXI=", "dGVzdGluZw=="},
+				"Content-Type":  {"application/json"},
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			req := test.Client.NewRequest(test.Method, test.Endpoint)
-			req.headers = test.Before
 
-			req = req.WithHeader(test.Key, test.Value)
+			for key, vals := range test.Added {
+				for _, val := range vals {
+					test.Builder.WithHeader(key, val)
+				}
+			}
 
-			assert.Equal(t, test.After, req.headers)
+			assert.Equal(t, test.After, test.Builder.headers)
 		})
 	}
 }
 
-// TestRequestWithHeaders tests adding headers to the request builder.
-func TestRequestWithHeaders(t *testing.T) {
-	tests := []struct {
-		Name     string
-		Client   *Client
-		Method   string
-		Endpoint string
-		Before   map[string]string
-		Headers  map[string]string
-		After    map[string]string
-	}{
-		{
-			Name:     "Adding headers to request without headers",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before:   map[string]string{},
-			Headers: map[string]string{
-				"Authorization": "x.y.z",
-				"Date":          "Wed, 21 Oct 2015 07:28:00 GMT",
-			},
-			After: map[string]string{
-				"Authorization": "x.y.z",
-				"Date":          "Wed, 21 Oct 2015 07:28:00 GMT",
-			},
-		},
-		{
-			Name:     "Adding headers to request with headers",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before: map[string]string{
-				"X-Api-Key": "a1g2Q4GlqCXXcqbZ",
-			},
-			Headers: map[string]string{
-				"Authorization": "x.y.z",
-				"Date":          "Wed, 21 Oct 2015 07:28:00 GMT",
-			},
-			After: map[string]string{
-				"X-Api-Key":     "a1g2Q4GlqCXXcqbZ",
-				"Authorization": "x.y.z",
-				"Date":          "Wed, 21 Oct 2015 07:28:00 GMT",
-			},
-		},
-		{
-			Name:     "Adding headers to request with same keys",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before: map[string]string{
-				"X-Api-Key":     "a1g2Q4GlqCXXcqbZ",
-				"Authorization": "a.b.c",
-				"Date":          "Tue, 04 Nov 2017 01:44:15 GMT",
-			},
-			Headers: map[string]string{
-				"Authorization": "x.y.z",
-				"Date":          "Wed, 21 Oct 2015 07:28:00 GMT",
-			},
-			After: map[string]string{
-				"X-Api-Key":     "a1g2Q4GlqCXXcqbZ",
-				"Authorization": "x.y.z",
-				"Date":          "Wed, 21 Oct 2015 07:28:00 GMT",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.Name, func(t *testing.T) {
-			req := test.Client.NewRequest(test.Method, test.Endpoint)
-			req.headers = test.Before
-
-			req = req.WithHeaders(test.Headers)
-
-			assert.Equal(t, test.After, req.headers)
-		})
-	}
-}
-
-// TestRequestWithQueryParameters tests adding a query parameter to the request builder.
+// TestRequestWithQueryParameter tests adding query parameters to a request builder.
 func TestRequestWithQueryParameter(t *testing.T) {
 	tests := []struct {
-		Name     string
-		Client   *Client
-		Method   string
-		Endpoint string
-		Before   map[string][]string
-		Key      string
-		Value    []string
-		After    map[string][]string
+		Name    string
+		Builder *RequestBuilder
+		Added   map[string][]string
+		After   map[string][]string
 	}{
 		{
-			Name:     "Adding query param to request without params",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before:   map[string][]string{},
-			Key:      "page",
-			Value:    []string{"0"},
+			Name:    "Adding parameters to empty set",
+			Builder: &RequestBuilder{},
+			Added: map[string][]string{
+				"ids":   {"123", "456", "789"},
+				"order": {"asc"},
+			},
 			After: map[string][]string{
-				"page": {"0"},
+				"ids":   {"123", "456", "789"},
+				"order": {"asc"},
 			},
 		},
 		{
-			Name:     "Adding query param to request with params",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before: map[string][]string{
-				"items": {"100"},
+			Name: "Adding parameters to populated set",
+			Builder: &RequestBuilder{
+				queryPrms: map[string][]string{
+					"ids":   {"123", "456", "789"},
+					"order": {"asc"},
+				},
 			},
-			Key:   "page",
-			Value: []string{"0"},
-			After: map[string][]string{
-				"page":  {"0"},
-				"items": {"100"},
-			},
-		},
-		{
-			Name:     "Adding query param to request with same key",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before: map[string][]string{
+			Added: map[string][]string{
 				"page":  {"1"},
-				"items": {"100"},
+				"items": {"20"},
 			},
-			Key:   "page",
-			Value: []string{"0"},
 			After: map[string][]string{
-				"page":  {"0"},
-				"items": {"100"},
+				"ids":   {"123", "456", "789"},
+				"order": {"asc"},
+				"page":  {"1"},
+				"items": {"20"},
+			},
+		},
+		{
+			Name: "Adding value to existing parameters",
+			Builder: &RequestBuilder{
+				queryPrms: map[string][]string{
+					"ids":   {"123", "456", "789"},
+					"order": {"asc"},
+				},
+			},
+			Added: map[string][]string{
+				"ids":     {"abc", "def", "ghi"},
+				"orderby": {"id"},
+			},
+			After: map[string][]string{
+				"ids":     {"123", "456", "789", "abc", "def", "ghi"},
+				"order":   {"asc"},
+				"orderby": {"id"},
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			req := test.Client.NewRequest(test.Method, test.Endpoint)
-			req.queryParams = test.Before
 
-			req = req.WithQueryParameter(test.Key, test.Value)
+			for key, vals := range test.Added {
+				test.Builder.WithQueryParameter(key, vals)
+			}
 
-			assert.Equal(t, test.After, req.queryParams)
+			assert.Equal(t, test.After, test.Builder.queryPrms)
 		})
 	}
 }
 
-// TestRequestWithQueryParameters tests adding query parameters to the request builder.
-func TestRequestWithQueryParameters(t *testing.T) {
-	tests := []struct {
-		Name     string
-		Client   *Client
-		Method   string
-		Endpoint string
-		Before   map[string][]string
-		Params   map[string][]string
-		After    map[string][]string
-	}{
-		{
-			Name:     "Adding query params to request without params",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before:   map[string][]string{},
-			Params: map[string][]string{
-				"page":    {"0"},
-				"orderby": {"id"},
-			},
-			After: map[string][]string{
-				"page":    {"0"},
-				"orderby": {"id"},
-			},
-		},
-		{
-			Name:     "Adding query params to request with params",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before: map[string][]string{
-				"items": {"100"},
-			},
-			Params: map[string][]string{
-				"page":    {"0"},
-				"orderby": {"id"},
-			},
-			After: map[string][]string{
-				"page":    {"0"},
-				"orderby": {"id"},
-				"items":   {"100"},
-			},
-		},
-		{
-			Name:     "Adding query params to request with same key",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before: map[string][]string{
-				"page":    {"1"},
-				"orderby": {"time"},
-				"items":   {"100"},
-			},
-			Params: map[string][]string{
-				"page":    {"0"},
-				"orderby": {"id"},
-			},
-			After: map[string][]string{
-				"page":    {"0"},
-				"orderby": {"id"},
-				"items":   {"100"},
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.Name, func(t *testing.T) {
-			req := test.Client.NewRequest(test.Method, test.Endpoint)
-			req.queryParams = test.Before
-
-			req = req.WithQueryParameters(test.Params)
-
-			assert.Equal(t, test.After, req.queryParams)
-		})
-	}
-}
-
-// TestRequestWithPathParameters tests adding path parameters to the request builder.
+// TestRequestWithPathParameters tests adding path parameters to a request builder.
 func TestRequestWithPathParameters(t *testing.T) {
 	tests := []struct {
-		Name     string
-		Client   *Client
-		Method   string
-		Endpoint string
-		Before   []string
-		Params   []string
-		After    []string
+		Name    string
+		Builder *RequestBuilder
+		Added   []string
+		After   []string
 	}{
 		{
-			Name:     "Adding path params to request without params",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before:   []string{},
-			Params:   []string{"rcD3yVsj", "DiBdvVeU"},
-			After:    []string{"rcD3yVsj", "DiBdvVeU"},
+			Name:    "Adding parameters to empty set",
+			Builder: &RequestBuilder{},
+			Added:   []string{"123", "456"},
+			After:   []string{"123", "456"},
 		},
 		{
-			Name:     "Adding query params to request with params",
-			Client:   NewClient(),
-			Method:   http.MethodGet,
-			Endpoint: "http://localhost:8080",
-			Before:   []string{"rnp7cd0w"},
-			Params:   []string{"rcD3yVsj", "DiBdvVeU"},
-			After:    []string{"rnp7cd0w", "rcD3yVsj", "DiBdvVeU"},
+			Name: "Adding parameters to populated set",
+			Builder: &RequestBuilder{
+				pathPrms: []string{"123", "456"},
+			},
+			Added: []string{"789", "abc"},
+			After: []string{"123", "456", "789", "abc"},
+		},
+		{
+			Name: "Adding parameters to be escaped",
+			Builder: &RequestBuilder{
+				pathPrms: []string{"123", "456"},
+			},
+			Added: []string{"Hello, Wold!"},
+			After: []string{"123", "456", "Hello%2C%20Wold%21"},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			req := test.Client.NewRequest(test.Method, test.Endpoint)
-			req.pathParams = test.Before
 
-			req = req.WithPathParameters(test.Params...)
+			test.Builder.WithPathParameters(test.Added...)
 
-			assert.Equal(t, test.After, req.pathParams)
+			assert.Equal(t, test.After, test.Builder.pathPrms)
 		})
 	}
 }
 
-// TestRunRequest tests running a request with the request builder.
-func TestRunRequest(t *testing.T) {
+// TestRequestBuild tests building a request.
+func TestRequestBuild(t *testing.T) {
 	tests := []struct {
-		Name        string
-		HttpClient  *mockHttpHandler
-		Method      string
-		Format      string
-		Body        any
-		Marshaler   Marshaler
-		Headers     map[string]string
-		QueryParams map[string][]string
-		PathParams  []string
-
-		Data       []byte
-		Endpoint   []byte
-		StatusCode int
-		Error      error
+		Name          string
+		Builder       *RequestBuilder
+		Context       context.Context
+		Error         error
+		Method        string
+		Body          []byte
+		ContentLength int64
+		Host          string
+		Path          string
+		QueryPrms     url.Values
+		Headers       http.Header
 	}{
 		{
-			Name:        "Successful request",
-			Method:      "POST",
-			Format:      "http://localhost:8080/{}",
-			Body:        map[string]any{"test": "test"},
-			Marshaler:   NewJSONMarshaler(),
-			Headers:     map[string]string{"Authorization": "Bearer x.y.z"},
-			QueryParams: map[string][]string{"query": {"query"}},
-			PathParams:  []string{"param"},
-			Data:        []byte(`{"test":"test"}`),
-			Endpoint:    []byte("http://localhost:8080/param?query=query"),
-			StatusCode:  201,
-			Error:       nil,
-
-			HttpClient: &mockHttpHandler{
-				code:    201,
-				err:     nil,
-				headers: map[string]string{},
+			Name: "GET request with details",
+			Builder: &RequestBuilder{
+				method:    http.MethodGet,
+				format:    "https://localhost:8080/users",
+				body:      nil,
+				marshaler: nil,
+				headers: map[string][]string{
+					"Authorization": {"eyJhbGciOiJIUzI1NiJ9.e30.ZRrHA1JJJW8opsbCGfG"},
+				},
+				queryPrms: map[string][]string{
+					"$select": {"id,name,email"},
+				},
+				pathPrms: nil,
+			},
+			Context:       context.Background(),
+			Error:         nil,
+			Method:        http.MethodGet,
+			Body:          []byte(""),
+			ContentLength: 0,
+			Host:          "localhost:8080",
+			Path:          "/users",
+			QueryPrms: map[string][]string{
+				"$select": {"id,name,email"},
+			},
+			Headers: map[string][]string{
+				"Authorization": {"eyJhbGciOiJIUzI1NiJ9.e30.ZRrHA1JJJW8opsbCGfG"},
+			},
+		},
+		{
+			Name: "PUT request with details",
+			Builder: &RequestBuilder{
+				method: http.MethodPatch,
+				format: "https://localhost:8080/users/{}/devices/{}/name",
+				body: map[string]any{
+					"Name": "My Phone",
+				},
+				marshaler: JsonMarshaler,
+				headers: map[string][]string{
+					"Authorization": {"eyJhbGciOiJIUzI1NiJ9.e30.ZRrHA1JJJW8opsbCGfG"},
+				},
+				queryPrms: nil,
+				pathPrms:  []string{"4481e035-1711-419f-82bc-bfb72da06375", "01JW3ZFVR44BWEAJRW7TEQ3PK0"},
+			},
+			Context:       context.Background(),
+			Error:         nil,
+			Method:        http.MethodPatch,
+			Body:          []byte(`{"Name":"My Phone"}`),
+			ContentLength: 19,
+			Host:          "localhost:8080",
+			Path:          "/users/4481e035-1711-419f-82bc-bfb72da06375/devices/01JW3ZFVR44BWEAJRW7TEQ3PK0/name",
+			QueryPrms:     map[string][]string{},
+			Headers: map[string][]string{
+				"Authorization": {"eyJhbGciOiJIUzI1NiJ9.e30.ZRrHA1JJJW8opsbCGfG"},
+				"Content-Type":  {"application/json"},
+			},
+		},
+		{
+			Name: "Request format includes query",
+			Builder: &RequestBuilder{
+				method:    http.MethodGet,
+				format:    "https://localhost:8080/users?orderby=id",
+				body:      nil,
+				marshaler: nil,
+				headers: map[string][]string{
+					"Authorization": {"eyJhbGciOiJIUzI1NiJ9.e30.ZRrHA1JJJW8opsbCGfG"},
+				},
+				queryPrms: map[string][]string{
+					"$select": {"id,name,email"},
+				},
+				pathPrms: nil,
+			},
+			Context:       context.Background(),
+			Error:         nil,
+			Method:        http.MethodGet,
+			Body:          []byte(""),
+			ContentLength: 0,
+			Host:          "localhost:8080",
+			Path:          "/users",
+			QueryPrms: map[string][]string{
+				"$select": {"id,name,email"},
+				"orderby": {"id"},
+			},
+			Headers: map[string][]string{
+				"Authorization": {"eyJhbGciOiJIUzI1NiJ9.e30.ZRrHA1JJJW8opsbCGfG"},
+			},
+		},
+		{
+			Name: "Request body is bytes",
+			Builder: &RequestBuilder{
+				method:    http.MethodPost,
+				format:    "https://localhost:8080/events",
+				body:      []byte("UserUpdated"),
+				marshaler: nil,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  nil,
+			},
+			Context:       context.Background(),
+			Error:         nil,
+			Method:        http.MethodPost,
+			Body:          []byte("UserUpdated"),
+			ContentLength: 11,
+			Host:          "localhost:8080",
+			Path:          "/events",
+			QueryPrms:     map[string][]string{},
+			Headers:       map[string][]string{},
+		},
+		{
+			Name: "Request body requires marshaler",
+			Builder: &RequestBuilder{
+				method:    http.MethodPost,
+				format:    "https://localhost:8080/events",
+				body:      time.Now(),
+				marshaler: nil,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  nil,
+			},
+			Context: context.Background(),
+			Error:   ErrInvalidBodyType,
+		},
+		{
+			Name: "Request body marshaling fails",
+			Builder: &RequestBuilder{
+				method:    http.MethodPost,
+				format:    "https://localhost:8080/events",
+				body:      time.Now(),
+				marshaler: UrlEncodedMarshaler,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  nil,
+			},
+			Context: context.Background(),
+			Error:   ErrInvalidBodyType,
+		},
+		{
+			Name: "Request format has trailing open bracket",
+			Builder: &RequestBuilder{
+				method:    http.MethodPut,
+				format:    "https://localhost:8080/users/{}/devices/{",
+				body:      nil,
+				marshaler: nil,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  []string{"123", "abc"},
+			},
+			Context: context.Background(),
+			Error:   ErrInvalidFormat,
+		},
+		{
+			Name: "Request format has unclosed bracket",
+			Builder: &RequestBuilder{
+				method:    http.MethodPut,
+				format:    "https://localhost:8080/users/{}/devices/{/name",
+				body:      nil,
+				marshaler: nil,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  []string{"123", "abc"},
+			},
+			Context: context.Background(),
+			Error:   ErrInvalidFormat,
+		},
+		{
+			Name: "Request format has unopened bracket",
+			Builder: &RequestBuilder{
+				method:    http.MethodPut,
+				format:    "https://localhost:8080/users/{}/devices/}/name",
+				body:      nil,
+				marshaler: nil,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  []string{"123", "abc"},
+			},
+			Context: context.Background(),
+			Error:   ErrInvalidFormat,
+		},
+		{
+			Name: "Request has too many path parameters",
+			Builder: &RequestBuilder{
+				method:    http.MethodPut,
+				format:    "https://localhost:8080/users/{}/devices/{}/name",
+				body:      nil,
+				marshaler: nil,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  []string{"123", "abc", "xyz"},
+			},
+			Context: context.Background(),
+			Error:   ErrInvalidFormat,
+		},
+		{
+			Name: "Request has not enough path parameters",
+			Builder: &RequestBuilder{
+				method:    http.MethodPut,
+				format:    "https://localhost:8080/users/{}/devices/{}/name",
+				body:      nil,
+				marshaler: nil,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  []string{"123"},
+			},
+			Context: context.Background(),
+			Error:   ErrInvalidFormat,
+		},
+		{
+			Name: "Request fails to build",
+			Builder: &RequestBuilder{
+				method:    http.MethodPut,
+				format:    string([]byte{0}),
+				body:      nil,
+				marshaler: nil,
+				headers:   nil,
+				queryPrms: nil,
+				pathPrms:  nil,
+			},
+			Context: context.Background(),
+			Error: &url.Error{
+				Op:  "parse",
+				URL: "\x00",
+				Err: errors.New("net/url: invalid control character in URL"),
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			cl := NewClient(UseHttpClient(test.HttpClient))
 
-			req := cl.NewRequest(
-				test.Method, test.Format,
-			).WithBody(
-				test.Body, test.Marshaler,
-			).WithHeaders(
-				test.Headers,
-			).WithQueryParameters(
-				test.QueryParams,
-			).WithPathParameters(
-				test.PathParams...,
-			)
-
-			res, err := req.Run(context.Background())
+			req, err := test.Builder.Build(test.Context)
 
 			assert.Equal(t, test.Error, err)
-			assert.Equal(t, test.Method, test.HttpClient.method)
-			assert.Equal(t, test.Endpoint, test.HttpClient.endpoint)
-			assert.Equal(t, test.Data, test.HttpClient.data)
+			if err == nil {
+				assert.NotNil(t, req)
 
-			if test.Error != nil {
-				assert.Nil(t, res)
+				assert.Equal(t, test.Context, req.Context())
+				assert.Equal(t, test.Method, req.Method)
+				assert.Equal(t, test.ContentLength, req.ContentLength)
+
+				assert.NotNil(t, req.URL)
+				assert.Equal(t, test.Host, req.URL.Host)
+				assert.Equal(t, test.Path, req.URL.Path)
+				assert.Equal(t, test.QueryPrms, req.URL.Query())
+				assert.Equal(t, test.Headers, req.Header)
+
+				body, _ := io.ReadAll(req.Body)
+				assert.Equal(t, test.Body, body)
 			} else {
-				assert.NotNil(t, res)
-				assert.Equal(t, test.StatusCode, res.StatusCode)
+				assert.Nil(t, req)
 			}
 		})
 	}

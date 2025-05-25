@@ -1,55 +1,41 @@
 package gent
 
 import (
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"time"
 )
 
-type mockMemPool struct {
-	MemoryPool
+type mockRequester struct {
+	// Request
+	LastRequest *http.Request
+	CountCalled int
+
+	// Response
+	Delay      time.Duration
+	RequestErr error
+	StatusCode int
+
+	// Closed
+	ClosedCount int
 }
 
-type mockHttpClient struct {
-	HttpClient
+func (m *mockRequester) CloseIdleConnections() {
+	m.ClosedCount++
 }
 
-type mockHttpHandler struct {
-	dur  time.Duration
-	err  error
-	code int
+func (m *mockRequester) Do(r *http.Request) (*http.Response, error) {
+	m.CountCalled++
+	m.LastRequest = r
 
-	method   string
-	data     []byte
-	endpoint []byte
-	headers  map[string]string
-	called   int
-}
+	time.Sleep(m.Delay)
 
-func (m *mockHttpHandler) Do(r *http.Request) (*http.Response, error) {
-	m.called++
-	m.method = r.Method
-	m.data, _ = ioutil.ReadAll(r.Body)
-	m.endpoint = []byte(r.URL.String())
-
-	for k, v := range r.Header {
-		if len(v) > 0 {
-			m.headers[k] = v[0]
-		}
-	}
-
-	select {
-	case <-r.Context().Done():
-		return nil, r.Context().Err()
-	case <-time.NewTimer(m.dur).C:
-		if m.err != nil {
-			return nil, m.err
-		} else {
-			rec := httptest.NewRecorder()
-			res := rec.Result()
-			res.StatusCode = m.code
-			return res, nil
-		}
+	if m.RequestErr != nil {
+		return nil, m.RequestErr
+	} else {
+		rec := httptest.NewRecorder()
+		res := rec.Result()
+		res.StatusCode = m.StatusCode
+		return res, nil
 	}
 }

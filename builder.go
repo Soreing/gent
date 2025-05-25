@@ -1,42 +1,59 @@
 package gent
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"net/http"
+	"net/url"
 )
+
+// ErrInvalidBodyType is returned by Marshaler functions when the object
+// can not be marshaled into a byte array due to its type, or the RequestBuilder
+// when the body requires a marshaler but none is provided
+var ErrInvalidBodyType = errors.New("invalid body type")
+
+// ErrInvalidFormat is returned by RequestBuilder.Build when the format has a
+// trailing or incomplate placeholder {}, or if the number of placeholders does
+// not match the number of path parameters
+var ErrInvalidFormat = errors.New("invalid endpoint format")
 
 // RequestBuilder allows gradual creation of http requests with functions to
 // attach a body, headers, query parameters and path parameters.
 type RequestBuilder struct {
-	client      *Client
-	method      string
-	endpoint    string
-	body        any
-	marshaler   Marshaler
-	headers     map[string]string
-	queryParams map[string][]string
-	pathParams  []string
+	method    string
+	format    string
+	body      any
+	marshaler Marshaler
+	headers   map[string][]string
+	queryPrms map[string][]string
+	pathPrms  []string
 }
 
 // NewRequest creates a request builder.
-func (c *Client) NewRequest(
+func NewRequest(
 	method string,
-	endpoint string,
+	format string,
 ) *RequestBuilder {
 	return &RequestBuilder{
-		client:      c,
-		method:      method,
-		endpoint:    endpoint,
-		body:        nil,
-		marshaler:   nil,
-		headers:     map[string]string{},
-		queryParams: map[string][]string{},
-		pathParams:  []string{},
+		method: method,
+		format: format,
 	}
 }
 
-// WithBody adds a request body and a marshaler to the request builder. If the
-// request builder already has a request body and marshaler, they get overwritten.
+// WithRawBody sets a byte array as the request body. If a body or marshaler
+// is already set, it will overwrite it.
+func (rb *RequestBuilder) WithRawBody(
+	body []byte,
+) *RequestBuilder {
+	rb.marshaler = nil
+	rb.body = body
+	return rb
+}
+
+// WithBody adds a body and a marshaler to the request. If a body or marshaler
+// is already set, it will overwrite it. The headers returned by the marshaler
+// will not overwrite headers set by [WithHeader] or [WithHeaders]
 func (rb *RequestBuilder) WithBody(
 	body any,
 	marshaler Marshaler,
@@ -46,67 +63,123 @@ func (rb *RequestBuilder) WithBody(
 	return rb
 }
 
-// WithHeader adds a header to the request builder. If the key was already
-// assigned some value, it gets overwritten.
+// WithHeader adds a header to the request. If there was already a header set
+// with the same key, it will overwrite it.
 func (rb *RequestBuilder) WithHeader(
 	key string,
 	val string,
 ) *RequestBuilder {
-	rb.headers[key] = val
-	return rb
-}
-
-// WithHeaders adds a list of headers to the request builder. If any of the keys
-// was already assigned some value, it gets overwritten.
-func (rb *RequestBuilder) WithHeaders(
-	headers map[string]string,
-) *RequestBuilder {
-	for k, v := range headers {
-		rb.headers[k] = v
+	if rb.headers == nil {
+		rb.headers = map[string][]string{}
 	}
+	rb.headers[key] = append(rb.headers[key], val)
 	return rb
 }
 
-// WithQueryParameter adds a query parameter to the request builder. If the key
-// was already assigned some value, it gets overwritten.
+// WithQueryParameter adds a query parameter to the request. If there was
+// already a parameter set with the same key, it will overwrite it.
 func (rb *RequestBuilder) WithQueryParameter(
 	key string,
-	val []string,
+	vals []string,
 ) *RequestBuilder {
-	rb.queryParams[key] = val
-	return rb
-}
-
-// WithQueryParameters adds a list of query parameters to the request builder.
-// If any of the keys was already assigned some value, it gets overwritten.
-func (rb *RequestBuilder) WithQueryParameters(
-	queryParams map[string][]string,
-) *RequestBuilder {
-	for k, v := range queryParams {
-		rb.queryParams[k] = v
+	if rb.queryPrms == nil {
+		rb.queryPrms = map[string][]string{}
 	}
+	rb.queryPrms[key] = append(rb.queryPrms[key], vals...)
 	return rb
 }
 
-// WithPathParameter adds a path parameter to the request builder. Each
-// parameter gets appended to the list in the builder.
+// WithPathParameter adds path parameters to the request. The parameters get
+// escaped and appended to the list in the request builder. Path parameters
+// replace {} placeholders in the request endpoint in the order they were added.
 func (rb *RequestBuilder) WithPathParameters(
-	pathParams ...string,
+	params ...string,
 ) *RequestBuilder {
-	rb.pathParams = append(rb.pathParams, pathParams...)
+	slc := make([]string, 0, len(rb.pathPrms)+len(params))
+	slc = append(slc, rb.pathPrms...)
+	for _, param := range params {
+		slc = append(slc, url.PathEscape(param))
+	}
+
+	rb.pathPrms = slc
 	return rb
 }
 
-// Run runs the request with the client that created the request builder.
-func (rb *RequestBuilder) Run(
+// Build returns a *http.Request from the values of the request builder.
+func (rb *RequestBuilder) Build(
 	ctx context.Context,
-) (res *http.Response, err error) {
-	return rb.client.Do(
-		ctx,
-		rb.method, rb.endpoint,
-		rb.body, rb.marshaler,
-		rb.headers,
-		rb.queryParams,
-		rb.pathParams...,
-	)
+) (res *http.Request, err error) {
+	buflen := len(rb.format)
+	for _, param := range rb.pathPrms {
+		buflen += len(param) - 2
+	}
+
+	// create request endpoint
+	endp := make([]byte, 0, buflen)
+	open, cursor, pidx := false, 0, 0
+	for i, ch := range rb.format {
+		if (open && ch != '}') || (!open && ch == '}') {
+			return nil, ErrInvalidFormat
+		} else if ch == '{' && pidx == len(rb.pathPrms) {
+			return nil, ErrInvalidFormat
+		} else if ch == '{' {
+			open = true
+		} else if ch == '}' {
+			open = false
+			endp = append(endp, rb.format[cursor:i-1]...)
+			endp = append(endp, rb.pathPrms[pidx]...)
+			cursor = i + 1
+			pidx++
+		}
+	}
+	if open || pidx != len(rb.pathPrms) {
+		return nil, ErrInvalidFormat
+	}
+	endp = append(endp, rb.format[cursor:]...)
+
+	// create body content
+	var body []byte
+	var bodyHdrs map[string][]string
+	if rb.marshaler != nil {
+		body, bodyHdrs, err = rb.marshaler(rb.body)
+		if err != nil {
+			return nil, err
+		}
+	} else if bytes, ok := rb.body.([]byte); bytes != nil && ok {
+		body = bytes
+	} else if rb.body != nil {
+		return nil, ErrInvalidBodyType
+	}
+
+	// create request
+	reader := bytes.NewReader(body)
+	req, err := http.NewRequestWithContext(ctx, rb.method, string(endp), reader)
+	if err != nil {
+		return nil, err
+	}
+
+	// set query params
+	if req.URL.RawQuery == "" {
+		req.URL.RawQuery = url.Values(rb.queryPrms).Encode()
+	} else {
+		q := req.URL.Query()
+		for k, v := range rb.queryPrms {
+			q[k] = append(q[k], v...)
+		}
+		req.URL.RawQuery = q.Encode()
+	}
+
+	// set headers
+	for key, vals := range rb.headers {
+		for _, val := range vals {
+			req.Header.Add(key, val)
+		}
+	}
+	for key, vals := range bodyHdrs {
+		for _, val := range vals {
+			req.Header.Add(key, val)
+		}
+	}
+
+	return req, nil
 }
